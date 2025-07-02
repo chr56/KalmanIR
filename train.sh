@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=2 python basicsr/train.py -opt options/train/train_DichoIRV2_Yan_SR_x4.yml
+CUDA_VISIBLE_DEVICES=2 python basicsr/train.py -opt options/train/train_DichoIRV5_Yan_SR_x4.yml

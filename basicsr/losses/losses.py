@@ -98,6 +98,59 @@ class V2_Loss(nn.Module):
         l1_2 = self.l1(pred_decimal_2, target_decimal)
         return l1_2 + 0.2*l1_1 + 0.1*l1_1_2
 
+
+'''
+全部使用L1 loss进行测试。
+'''
+@LOSS_REGISTRY.register()
+class V3_Loss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(V3_Loss, self).__init__()
+        if reduction not in ['none', 'mean', 'sum']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+        #self.smooth_l1 = CharbonnierLoss()
+        self.l1 = L1Loss()
+        self.fourier = FourierLoss()
+
+    def forward(self, pred, target, weight=None, **kwargs):
+        """
+        Args:
+            pred (Tensor): of shape (N, C, H, W). Predicted tensor.
+            target (Tensor): of shape (N, C, H, W). Ground truth tensor.
+            weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
+        """
+        x_refine, x_L1, x_Fourier = pred
+        loss1_L1 = self.l1(x_L1, target)
+        loss1_fourier = self.fourier(x_Fourier, target)
+        loss2_refine =self.l1(x_refine, target)
+        return loss2_refine + 0.2 * loss1_L1 + 0.1 * loss1_fourier
+
+
+@LOSS_REGISTRY.register()
+class FourierLoss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(FourierLoss, self).__init__()
+        if reduction not in ['none', 'mean', 'sum']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+        #self.smooth_l1 = CharbonnierLoss()
+        self.l1 = L1Loss()
+
+    def forward(self, pred, target, weight=None, **kwargs):
+        """
+        Args:
+            pred (Tensor): of shape (N, C, H, W). Predicted tensor.
+            target (Tensor): of shape (N, C, H, W). Ground truth tensor.
+            weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
+        """
+        return self.l1(torch.fft.rfft2(pred, dim=(-2,-1)), torch.fft.rfft2(target, dim=(-2,-1)))
+
+
 @LOSS_REGISTRY.register()
 class BCEFocalLoss(nn.Module):
     def __init__(self, gamma=2, alpha=0.25, reduction='mean'):
@@ -648,3 +701,29 @@ class GANFeatLoss(nn.Module):
                 unweighted_loss = self.loss_op(pred_fake[i][j], pred_real[i][j].detach())
                 loss += unweighted_loss / num_d
         return loss * self.loss_weightimport
+
+@LOSS_REGISTRY.register()
+class V5_Loss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(V5_Loss, self).__init__()
+        if reduction not in ['none', 'mean', 'sum']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+        #self.smooth_l1 = CharbonnierLoss()
+        self.l1 = L1Loss()
+        self.fourier = FourierLoss()
+
+    def forward(self, pred, target, weight=None, **kwargs):
+        """
+        Args:
+            pred (Tensor): of shape (N, C, H, W). Predicted tensor.
+            target (Tensor): of shape (N, C, H, W). Ground truth tensor.
+            weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
+        """
+        x_refine, x_L1, x_Fourier = pred
+        loss1_L1 = self.l1(x_L1, target)
+        loss1_fourier = self.fourier(x_Fourier, target)
+        loss2_refine =self.l1(x_refine, target)
+        return loss2_refine + 0.2 * loss1_L1 + 0.1 * loss1_fourier

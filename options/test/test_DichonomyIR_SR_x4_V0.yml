@@ -1,19 +1,20 @@
 # general settings
-name: test_x4_V0
+name: DichonomySRV1LossV2
+# name: MambaIR_Original
 model_type: MambaIRModel
 scale: 4
-num_gpu: 8
-manual_seed: 10
+num_gpu: 1
+manual_seed: 42
 
 datasets:
-  test_1:  # the 1st test dataset
-    name: Set5
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
+#  test_1:  # the 1st test dataset
+#    name: Set5
+#    type: PairedImageShuffleDataset
+#    dataroot_gt: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/HR
+#    dataroot_lq: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/LR
+#    filename_tmpl: '{}'
+#    io_backend:
+#      type: disk
 
 #  test_2:  # the 2nd test dataset
 #    name: Set14
@@ -23,7 +24,7 @@ datasets:
 #    filename_tmpl: '{}'
 #    io_backend:
 #      type: disk
-##
+#
 #  test_3:  # the 3rd test dataset
 #    name: BSDS100
 #    type: PairedImageShuffleDataset
@@ -32,16 +33,16 @@ datasets:
 #    filename_tmpl: '{}'
 #    io_backend:
 #      type: disk
-#
-#  test_4:  # the 4th test dataset
-#    name: Urban100
-#    type: PairedImageShuffleDataset
-#    dataroot_gt: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/HR
-#    dataroot_lq: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/LR
-#    filename_tmpl: '{}'
-#    io_backend:
-#      type: disk
-#
+
+  test_4:  # the 4th test dataset
+    name: Urban100
+    type: PairedImageShuffleDataset
+    dataroot_gt: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
 #  test_5:  # the 5th test dataset
 #    name: Manga109
 #    type: PairedImageShuffleDataset
@@ -55,13 +56,14 @@ datasets:
 
 # network structures
 network_g:
-  type: MambaITEROCTIRV0_3
+  type: DichotomyIR
+  # type: MambaIR
   upscale: 4
   in_chans: 3
-  img_size: 64
+  img_size: 32
   img_range: 1.
   d_state: 16
-  depths: [6, 6, 6, 6, 6, 6]
+  depths: [3, 3, 3, 3, 3, 3]
   embed_dim: 180
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
@@ -69,10 +71,13 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: /home/heshiwen/pyproject/MambaIR/experiments/x4_V0_3/models/net_g_latest.pth
-  strict_load_g: true
+  # pretrain_network_g: /home/heshiwen/pyproject/MambaIR_1/experiments/MambaIR_pd_V3/models/net_g_130000.pth
+  # pretrain_network_g: /home/heshiwen/pyproject/MambaIR/experiments/MambaIR_pd_V2/models/net_g_150000.pth
+  # pretrain_network_g: /data2/hsw/MambaIR_Yan/experiments/MambaIR_Original/models/net_g_latest.pth
+  pretrain_network_g: /data2/hsw/MambaIR_Yan/experiments/DichonomySRV1_V2loss_PSNR32.5685/models/net_g_latest.pth
+  strict_load_g: false
 
-# validation settings
+# validation settingsconda activate
 val:
   save_img: true
   suffix: ~  # add suffix to saved images, if None, use exp name
@@ -86,3 +91,10 @@ val:
       type: calculate_ssim
       crop_border: 4
       test_y_channel: true
+#    niqe:
+#      type: calculate_niqe
+#      crop_border: 4
+#      convert_to: 'y'
+#    lpips:
+#      type: calculate_lpips
+#      model: 'alex'

@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python basicsr/test.py -opt options/test/test_MambaIR_SR_x4_V0.yml
+CUDA_VISIBLE_DEVICES=0 python basicsr/test.py -opt options/test/test_DichonomyIR_SR_x4_V0.yml
