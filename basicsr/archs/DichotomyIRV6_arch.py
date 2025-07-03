@@ -3,6 +3,7 @@
 '''
 use 2DVMamba
 '''
+
 import math
 import torch
 import torch.nn as nn
@@ -16,8 +17,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import rearrange, repeat
 
-# from .mamba_mil.MambaMIL2D import MambaMIL2D
-from .mamba_mil.pscan_2d import selective_scan_fn as mil_selective_scan_fn
+from .vmamba_2d.vmamba import SS2D as VSS2D
 
 NEG_INF = -1000000
 
@@ -751,6 +751,27 @@ class SS2D_b(nn.Module):
         out = out.permute(0, 3, 1, 2)#[B,H,W,C]->[B,C,H,W]
         return out
 
+class ChannelRearrangedVSS2D(nn.Module):
+    def __init__(self, **kwargs):
+        super(ChannelRearrangedVSS2D, self).__init__()
+        self.wrapped = VSS2D(forward_type="m0_noz",**kwargs)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 3, 1)  # [B,C,H,W]->[B,H,W,C]
+        x = self.wrapped(x)
+        x = x.permute(0, 3, 1, 2)  # [B,H,W,C]->[B,C,H,W]
+        return x
+
+class _ChannelRearrangedVSS2D(VSS2D):
+    def __init__(self, **kwargs):
+        super(_ChannelRearrangedVSS2D, self).__init__(**kwargs)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 3, 1)  # [B,C,H,W]->[B,H,W,C]
+        x = self.wrapped(x)
+        x = x.permute(0, 3, 1, 2)  # [B,H,W,C]->[B,C,H,W]
+        return x
+
 
 class VSSBlock(nn.Module):
     def __init__(
@@ -766,7 +787,9 @@ class VSSBlock(nn.Module):
     ):
         super().__init__()
         self.ln_1 = norm_layer(hidden_dim)
-        self.self_attention = SS2D(d_model=hidden_dim, d_state=d_state,expand=expand,dropout=attn_drop_rate, **kwargs)
+        self.self_attention = VSS2D(
+            d_model=hidden_dim, d_state=d_state,expand=expand,dropout=attn_drop_rate, forward_type="m0_noz", **kwargs
+        )
         self.drop_path = DropPath(drop_path)
         self.skip_scale= nn.Parameter(torch.ones(hidden_dim))
         self.conv_blk = CAB(hidden_dim,is_light_sr)
@@ -1000,8 +1023,8 @@ class DichotomyIRV6(nn.Module):
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, 2*num_out_ch, 3, 1, 1)
 
-        self.mamba_g = SS2D_g(d_model=num_out_ch)
-        self.mamba_b = SS2D_b(d_model=num_out_ch)
+        self.mamba_g = ChannelRearrangedVSS2D(d_model=num_out_ch)
+        self.mamba_b = ChannelRearrangedVSS2D(d_model=num_out_ch)
         # self.last_norm = nn.BatchNorm2d(num_features=24)
         self.apply(self._init_weights)
 
