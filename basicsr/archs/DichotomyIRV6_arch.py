@@ -762,16 +762,6 @@ class ChannelRearrangedVSS2D(nn.Module):
         x = x.permute(0, 3, 1, 2)  # [B,H,W,C]->[B,C,H,W]
         return x
 
-class _ChannelRearrangedVSS2D(VSS2D):
-    def __init__(self, **kwargs):
-        super(_ChannelRearrangedVSS2D, self).__init__(**kwargs)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 3, 1)  # [B,C,H,W]->[B,H,W,C]
-        x = self.wrapped(x)
-        x = x.permute(0, 3, 1, 2)  # [B,H,W,C]->[B,C,H,W]
-        return x
-
 
 class VSSBlock(nn.Module):
     def __init__(
