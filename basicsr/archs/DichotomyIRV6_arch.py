@@ -3,20 +3,24 @@
 '''
 use 2DVMamba
 '''
+
 import math
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint as checkpoint
 import torch.nn.functional as F
 from functools import partial
 from typing import Optional, Callable
+
+from PIL.features import features
+
 from basicsr.utils.registry import ARCH_REGISTRY
 from basicsr.utils import decimal_to_binary, binary_to_decimal
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import rearrange, repeat
 
-from .vmamba_2d.vmamba import VSSBlock
+from .vmamba_2d.vmamba import VSSBlock, VSSM
+
 
 class SS2D_g(nn.Module):
     def __init__(
@@ -385,76 +389,24 @@ class SS2D_b(nn.Module):
         out = out.permute(0, 3, 1, 2)#[B,H,W,C]->[B,C,H,W]
         return out
 
-class BasicLayer(nn.Module):
-    """ The Basic MambaIR Layer in one Residual State Space Group
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-    """
 
-    def __init__(self,
-                 dim,
-                 input_resolution,
-                 depth,
-                 drop_path=0.,
-                 d_state=16,
-                 mlp_ratio=2.,
-                 norm_layer=nn.LayerNorm,
-                 downsample=None,
-                 use_checkpoint=False,is_light_sr=False):
+class BackboneVSSM(VSSM):
+    def __init__(self, norm_layer: nn.Module, channel_first=True, **kwargs):
+        super().__init__(**kwargs)
+        del self.classifier
+        self.channel_first = channel_first
+        for i, dim in enumerate(self.dims):
+            self.add_module(name=f'output_norm_layer_{i}', module=norm_layer(dim))
 
-        super().__init__()
-        self.dim = dim
-        self.input_resolution = input_resolution
-        self.depth = depth
-        self.mlp_ratio=mlp_ratio
-        self.use_checkpoint = use_checkpoint
-
-        # build blocks
-        self.blocks = nn.ModuleList()
-        for i in range(depth):
-            self.blocks.append(VSSBlock(
-                hidden_dim=dim,
-                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                ssm_drop_rate=0,
-                d_state=d_state,
-                mlp_ratio=self.mlp_ratio,
-                channel_first=True,
-            ))
-
-        # patch merging layer
-        if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=norm_layer)
-        else:
-            self.downsample = None
-
-    def forward(self, x, x_size):
-        for blk in self.blocks:
-            if self.use_checkpoint:
-                x = checkpoint.checkpoint(blk, x)
-            else:
-                x = blk(x)
-        if self.downsample is not None:
-            x = self.downsample(x)
+    def forward(self, x: torch.Tensor):
+        x = self.patch_embed(x)
+        for i, layer in enumerate(self.layers):
+            x = layer.blocks(x)
+            norm_layer = getattr(self, f'output_norm_layer_{i}')
+            x = norm_layer(x)
+        if self.channel_first:
+            x = x.permute(0, 3, 1, 2)
         return x
-
-    def extra_repr(self) -> str:
-        return f'dim={self.dim}, input_resolution={self.input_resolution}, depth={self.depth}'
-
-    def flops(self):
-        flops = 0
-        for blk in self.blocks:
-            flops += blk.flops()
-        if self.downsample is not None:
-            flops += self.downsample.flops()
-        return flops
-
 
 @ARCH_REGISTRY.register()
 class DichotomyIRV6(nn.Module):
@@ -500,6 +452,7 @@ class DichotomyIRV6(nn.Module):
         num_in_ch = in_chans
         num_out_ch = in_chans*8
         num_feat = 64
+        self.img_size = img_size
         self.img_range = img_range
         if in_chans == 3:
             rgb_mean = (0.4488, 0.4371, 0.4040)
@@ -513,64 +466,24 @@ class DichotomyIRV6(nn.Module):
         self.conv_first = nn.Conv2d(num_in_ch, embed_dim, 3, 1, 1)
 
         # ------------------------- 2, deep feature extraction ------------------------- #
-        self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm
         self.num_features = embed_dim
 
-
-        # transfer 2D feature map into 1D token sequence, pay attention to whether using normalization
-        self.patch_embed = PatchEmbed(
-            img_size=img_size,
-            patch_size=patch_size,
-            in_chans=embed_dim,
-            embed_dim=embed_dim,
-            norm_layer=norm_layer if self.patch_norm else None)
-        num_patches = self.patch_embed.num_patches
-        patches_resolution = self.patch_embed.patches_resolution
-        self.patches_resolution = patches_resolution
-
-        # return 2D feature map from 1D token sequence
-        self.patch_unembed = PatchUnEmbed(
-            img_size=img_size,
-            patch_size=patch_size,
-            in_chans=embed_dim,
-            embed_dim=embed_dim,
-            norm_layer=norm_layer if self.patch_norm else None)
-
+        layers_dim = [embed_dim for _ in range(len(depths))]
         self.pos_drop = nn.Dropout(p=drop_rate)
-        self.is_light_sr = True if self.upsampler=='pixelshuffledirect' else False
-        # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
-
-        # build Residual State Space Group (RSSG)
-        self.layers = nn.ModuleList()
-        # self.decodes = nn.ModuleList()
-        # self.upsamples = nn.ModuleList()
-
-        for i_layer in range(self.num_layers): # 6-layer
-            layer = ResidualGroup(
-                dim=embed_dim,
-                input_resolution=(patches_resolution[0], patches_resolution[1]),
-                depth=depths[i_layer],
-                d_state=d_state,
-                mlp_ratio=self.mlp_ratio,
-                drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],  # no impact on SR results
-                norm_layer=norm_layer,
-                downsample=None,
-                use_checkpoint=use_checkpoint,
-                img_size=img_size,
-                patch_size=patch_size,
-                resi_connection=resi_connection,
-                is_light_sr=self.is_light_sr
-            )
-            # self.decodes.append(nn.Sequential(
-            #     nn.Conv2d(embed_dim, embed_dim, 3, 1, 1),
-            #     nn.BatchNorm2d(self.num_features),
-            #     UpsampleOneStep(upscale, embed_dim, num_out_ch*2)))
-
-            self.layers.append(layer)
-        self.norm = norm_layer(self.num_features)
+        self.features_extractor = BackboneVSSM(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=embed_dim,
+            depths=depths,
+            dims=layers_dim,
+            ssm_d_state=d_state,
+            use_checkpoint=use_checkpoint,
+            drop_path_rate=drop_path_rate,
+            norm_layer=norm_layer,
+            ssm_init="v0", forward_type="v05_noz",
+        )
 
         # build the last conv layer in the end of all residual groups
         if resi_connection == '1conv':
@@ -629,26 +542,9 @@ class DichotomyIRV6(nn.Module):
         return {'relative_position_bias_table'}
 
     def forward_features(self, x):
-        x_size = (x.shape[2], x.shape[3])
-        x = self.patch_embed(x) # N,L,C
-
         x = self.pos_drop(x)
-        out = []
-        for layer in self.layers:
-            x = layer(x, x_size)
-            # mid_result = decode(self.patch_unembed(x, x_size))
-            # out.append(mid_result)
-            # mid_decimal_l1 = torch.sin(mid_result[:, :24, ...])
-            # mid_binary_bce = torch.sigmoid(mid_result[:, 24:, ...])
-            # fuzzy_map = self.downsample(torch.abs(mid_decimal_l1-mid_binary_bce).mean(dim=1, keepdim=True))
-            # # print(fuzzy_map.shape)
-            # # print(self.patch_unembed(x, x_size).shape)
-            # x = self.patch_unembed(x, x_size)*(1+fuzzy_map)
-            # x = self.patch_embed(x)
-        x = self.norm(x)  # b seq_len c
-        x = self.patch_unembed(x, x_size)
-
-        return x, out
+        x = self.features_extractor(x)
+        return x
 
     def forward(self, x):
         # self.mean = self.mean.type_as(x)
@@ -657,14 +553,14 @@ class DichotomyIRV6(nn.Module):
         if self.upsampler == 'pixelshuffle':
             # for classical SR
             x = self.conv_first(x)
-            feat, outs = self.forward_features(x)
+            feat = self.forward_features(x)
             x = self.conv_after_body(feat) + x
             feat_before_upsample = self.conv_before_upsample(x)
             x = self.conv_last(self.upsample(feat_before_upsample))
 
         elif self.upsampler == 'pixelshuffledirect':
             # for lightweight SR
-            feat, outs = self.forward_features(x)
+            feat = self.forward_features(x)
             x = self.conv_after_body(feat) + x
             x = self.upsample(x)
 
@@ -703,169 +599,13 @@ class DichotomyIRV6(nn.Module):
 
     def flops(self):
         flops = 0
-        h, w = self.patches_resolution
+        h, w = self.img_size, self.img_size
         flops += h * w * 3 * self.embed_dim * 9
-        flops += self.patch_embed.flops()
         for layer in self.layers:
             flops += layer.flops()
         flops += h * w * 3 * self.embed_dim * self.embed_dim
         flops += self.upsample.flops()
         return flops
-
-
-class ResidualGroup(nn.Module):
-    """Residual State Space Group (RSSG).
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-        img_size: Input image size.
-        patch_size: Patch size.
-        resi_connection: The convolutional block before residual connection.
-    """
-
-    def __init__(self,
-                 dim,
-                 input_resolution,
-                 depth,
-                 d_state=16,
-                 mlp_ratio=4.,
-                 drop_path=0.,
-                 norm_layer=nn.LayerNorm,
-                 downsample=None,
-                 use_checkpoint=False,
-                 img_size=None,
-                 patch_size=None,
-                 resi_connection='1conv',
-                 is_light_sr = False):
-        super(ResidualGroup, self).__init__()
-
-        self.dim = dim
-        self.input_resolution = input_resolution # [64, 64]
-
-        self.residual_group = BasicLayer(
-            dim=dim,
-            input_resolution=input_resolution,
-            depth=depth,
-            d_state = d_state,
-            mlp_ratio=mlp_ratio,
-            drop_path=drop_path,
-            norm_layer=norm_layer,
-            downsample=downsample,
-            use_checkpoint=use_checkpoint,
-            is_light_sr = is_light_sr)
-
-        # build the last conv layer in each residual state space group
-        if resi_connection == '1conv':
-            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
-        elif resi_connection == '3conv':
-            # to save parameters and memory
-            self.conv = nn.Sequential(
-                nn.Conv2d(dim, dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim, 3, 1, 1))
-
-        self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-        self.patch_unembed = PatchUnEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-    def forward(self, x, x_size):
-        return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size), x_size))) + x
-
-    def flops(self):
-        flops = 0
-        flops += self.residual_group.flops()
-        h, w = self.input_resolution
-        flops += h * w * self.dim * self.dim * 9
-        flops += self.patch_embed.flops()
-        flops += self.patch_unembed.flops()
-
-        return flops
-
-
-class PatchEmbed(nn.Module):
-    r""" transfer 2D feature map into 1D token sequence
-
-    Args:
-        img_size (int): Image size.  Default: None.
-        patch_size (int): Patch token size. Default: None.
-        in_chans (int): Number of input image channels. Default: 3.
-        embed_dim (int): Number of linear projection output channels. Default: 96.
-        norm_layer (nn.Module, optional): Normalization layer. Default: None
-    """
-
-    def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.patches_resolution = patches_resolution
-        self.num_patches = patches_resolution[0] * patches_resolution[1]
-
-        self.in_chans = in_chans
-        self.embed_dim = embed_dim
-
-        if norm_layer is not None:
-            self.norm = norm_layer(embed_dim)
-        else:
-            self.norm = None
-
-    def forward(self, x):
-        x = x.flatten(2).transpose(1, 2)  # b Ph*Pw c
-        if self.norm is not None:
-            x = self.norm(x)
-        return x
-
-    def flops(self):
-        flops = 0
-        h, w = self.img_size
-        if self.norm is not None:
-            flops += h * w * self.embed_dim
-        return flops
-
-
-class PatchUnEmbed(nn.Module):
-    r""" return 2D feature map from 1D token sequence
-
-    Args:
-        img_size (int): Image size.  Default: None.
-        patch_size (int): Patch token size. Default: None.
-        in_chans (int): Number of input image channels. Default: 3.
-        embed_dim (int): Number of linear projection output channels. Default: 96.
-        norm_layer (nn.Module, optional): Normalization layer. Default: None
-    """
-
-    def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.patches_resolution = patches_resolution
-        self.num_patches = patches_resolution[0] * patches_resolution[1]
-
-        self.in_chans = in_chans
-        self.embed_dim = embed_dim
-
-    def forward(self, x, x_size):
-        x = x.transpose(1, 2).view(x.shape[0], self.embed_dim, x_size[0], x_size[1])  # b Ph*Pw c
-        return x
-
-    def flops(self):
-        flops = 0
-        return flops
-
 
 
 class UpsampleOneStep(nn.Sequential):
