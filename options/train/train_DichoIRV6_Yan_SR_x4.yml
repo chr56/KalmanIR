@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: DichonomySRV6_V5loss
+name: DichonomySRV6_V2Loss
 model_type: MambaIRModel
 scale: 4
 num_gpu: 1
@@ -126,7 +126,7 @@ train:
 #    loss_weight: 1.0
 #    reduction: mean
 #  loss2:
-    type: V5_Loss
+    type: V2_Loss
     loss_weight: 1.0
     reduction: mean
 # validation settings
