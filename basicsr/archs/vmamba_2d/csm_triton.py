@@ -294,7 +294,7 @@ class CrossMergeF(torch.autograd.Function):
 
 # triton implements ========================================
 
-@triton.jit
+# @triton.jit
 def triton_cross_scan_flex(
     x: tl.tensor, # (B, C, H, W) | (B, H, W, C) | (B, 4, C, H, W) | (B, H, W, 4, C)
     y: tl.tensor, # (B, 4, C, H, W) | (B, H, W, 4, C)
