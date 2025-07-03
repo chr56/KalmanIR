@@ -270,7 +270,7 @@ class SS2D(nn.Module):
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
 
-        self.selective_scan = selective_scan_fn
+        self.selective_scan = mil_selective_scan_fn
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
@@ -451,7 +451,7 @@ class SS2D_g(nn.Module):
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
 
-        self.selective_scan = selective_scan_fn
+        self.selective_scan = mil_selective_scan_fn
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
@@ -635,7 +635,7 @@ class SS2D_b(nn.Module):
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
 
-        self.selective_scan = selective_scan_fn
+        self.selective_scan = mil_selective_scan_fn
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
