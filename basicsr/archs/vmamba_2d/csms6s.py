@@ -29,7 +29,8 @@ try:
     # sys.path.append("../../..")
     #import sys
     #sys.path.append("/gpfs/home/jingwezhang/Projects/VMamba")  # "../../..")
-    import v2dmamba_scan
+    from basicsr.archs.mamba_mil.pscan import *
+    # import v2dmamba_scan
 except ImportError:
     raise ImportError("Can not import v2dmamba_scan.")
 
