@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import numpy as np
 import torch.nn as nn
@@ -6,71 +8,90 @@ from .mamba_simple import MambaConfig as SimpleMambaConfig
 from .mamba_simple import Mamba as SimpleMamba
 
 
-def split_tensor(data, batch_size):
-    num_chk = int(np.ceil(data.shape[0] / batch_size))
-    return torch.chunk(data, num_chk, dim=0)
-
-
-def initialize_weights(module):
-    for m in module.modules():
-        if isinstance(m, nn.Linear):
-            nn.init.xavier_normal_(m.weight)
-            if m.bias is not None:
-                m.bias.data.zero_()
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
-
+# noinspection PyPep8Naming
 class MambaMIL2D(nn.Module):
-    def __init__(self, args):
+    def __init__(self,
+                 in_dim: int = 1024,
+                 d_model: int = 128,
+                 n_layers: int = 1,
+                 d_state: int = 16,
+                 inner_layernorms: bool = False,
+                 drop_out: float = 0.25,
+                 pscan: bool = True,
+                 cuda_pscan: bool = False,
+                 mamba_2d_max_w: int = 224,
+                 mamba_2d_max_h: int = 224,
+                 mamba_2d_pad_token: str = 'trainable',
+                 mamba_2d_patch_size: int = 512,
+                 n_classes: int = 1,
+                 survival: bool = False,
+                 pos_emb_type: Optional[str] = None,
+                 pos_emb_dropout: float = 0.0,
+                 patch_encoder_batch_size: int = 128,
+                 ):
+
         super(MambaMIL2D, self).__init__()
-        self.args = args
-        self._fc1 = [nn.Linear(args.in_dim, self.args.mambamil_dim)]
+
+        self.in_dim = in_dim
+        self.d_model = d_model
+        self.drop_out = drop_out
+        self.n_layers = n_layers
+        self.d_state = d_state
+        self.inner_layernorms = inner_layernorms
+        self.pscan = pscan
+        self.cuda_pscan = cuda_pscan
+        self.mamba_2d_max_w = mamba_2d_max_w
+        self.mamba_2d_max_h = mamba_2d_max_h
+        self.mamba_2d_pad_token = mamba_2d_pad_token
+        self.mamba_2d_patch_size = mamba_2d_patch_size
+        self.n_classes = n_classes
+        self.survival = survival
+        self.pos_emb_type = pos_emb_type
+        self.pos_emb_dropout = pos_emb_dropout
+        self.patch_encoder_batch_size = patch_encoder_batch_size
+
+        self._fc1 = [nn.Linear(self.in_dim, self.d_model)]
         self._fc1 += [nn.GELU()]
-        if args.drop_out > 0:
-            self._fc1 += [nn.Dropout(args.drop_out)]
+        if self.drop_out > 0:
+            self._fc1 += [nn.Dropout(self.drop_out)]
 
         self._fc1 = nn.Sequential(*self._fc1)
 
-        self.norm = nn.LayerNorm(self.args.mambamil_dim)
+        self.norm = nn.LayerNorm(self.d_model)
 
         self.layers = nn.ModuleList()
-        self.patch_encoder_batch_size = args.patch_encoder_batch_size
+        self.patch_encoder_batch_size = self.patch_encoder_batch_size
         config = SimpleMambaConfig(
-            d_model=args.mambamil_dim,
-            n_layers=args.mambamil_layer,
-            d_state=args.mambamil_state_dim,
-            inner_layernorms=args.mambamil_inner_layernorms,
-            pscan=args.pscan,
-            use_cuda=args.cuda_pscan,
-            mamba_2d=True if args.model_type == '2DMambaMIL' else False,
-            mamba_2d_max_w=args.mamba_2d_max_w,
-            mamba_2d_max_h=args.mamba_2d_max_h,
-            mamba_2d_pad_token=args.mamba_2d_pad_token,
-            mamba_2d_patch_size=args.mamba_2d_patch_size
+            d_model=self.d_model,
+            n_layers=self.n_layers,
+            d_state=self.d_state,
+            inner_layernorms=self.inner_layernorms,
+            pscan=self.pscan,
+            use_cuda=self.cuda_pscan,
+            mamba_2d=True,
+            mamba_2d_max_w=self.mamba_2d_max_w,
+            mamba_2d_max_h=self.mamba_2d_max_h,
+            mamba_2d_pad_token=self.mamba_2d_pad_token,
+            mamba_2d_patch_size=self.mamba_2d_patch_size
         )
         self.layers = SimpleMamba(config)
         self.config = config
 
-        self.n_classes = args.n_classes
-
         self.attention = nn.Sequential(
-            nn.Linear(self.args.mambamil_dim, 128),
+            nn.Linear(self.d_model, 128),
             nn.Tanh(),
             nn.Linear(128, 1)
         )
-        self.classifier = nn.Linear(self.args.mambamil_dim, self.n_classes)
-        self.survival = args.survival
+        self.classifier = nn.Linear(self.d_model, self.n_classes)
 
-        if args.pos_emb_type == 'linear':
-            self.pos_embs = nn.Linear(2, args.mambamil_dim)
-            self.norm_pe = nn.LayerNorm(args.mambamil_dim)
-            self.pos_emb_dropout = nn.Dropout(args.pos_emb_dropout)
+        if self.pos_emb_type == 'linear':
+            self.pos_embs = nn.Linear(2, self.d_model)
+            self.norm_pe = nn.LayerNorm(self.d_model)
+            self.pos_emb_dropout = nn.Dropout(self.pos_emb_dropout)
         else:
             self.pos_embs = None
 
-        self.apply(initialize_weights)
+        self.apply(_initialize_weights)
 
     def forward(self, x, coords):
         if len(x.shape) == 2:
@@ -80,7 +101,7 @@ class MambaMIL2D(nn.Module):
         h = self._fc1(h)  # [1, num_patch, mamba_dim];   project from feature_dim -> mamba_dim
 
         # Add Pos_emb
-        if self.args.pos_emb_type == 'linear':
+        if self.pos_emb_type == 'linear':
             pos_embs = self.pos_embs(coords)
             h = h + pos_embs.unsqueeze(0)
             h = self.pos_emb_dropout(h)
@@ -121,3 +142,19 @@ class MambaMIL2D(nn.Module):
         self.attention = self.attention.to(device)
         self.norm = self.norm.to(device)
         self.classifier = self.classifier.to(device)
+
+
+def _split_tensor(data, batch_size):
+    num_chk = int(np.ceil(data.shape[0] / batch_size))
+    return torch.chunk(data, num_chk, dim=0)
+
+
+def _initialize_weights(module):
+    for m in module.modules():
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_normal_(m.weight)
+            if m.bias is not None:
+                m.bias.data.zero_()
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
