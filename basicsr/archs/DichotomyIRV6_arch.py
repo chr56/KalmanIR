@@ -15,8 +15,9 @@ from basicsr.utils import decimal_to_binary, binary_to_decimal
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import rearrange, repeat
-from basicsr.utils.vmamba import v2dmamba_scan
 
+# from .mamba_mil.MambaMIL2D import MambaMIL2D
+from .mamba_mil.pscan_2d import selective_scan_fn as mil_selective_scan_fn
 
 NEG_INF = -1000000
 
@@ -857,7 +858,7 @@ class BasicLayer(nn.Module):
 
 
 @ARCH_REGISTRY.register()
-class DichotomyIR(nn.Module):
+class DichotomyIRV6(nn.Module):
     r""" MambaIR Model
            A PyTorch impl of : `A Simple Baseline for Image Restoration with State Space Model `.
 
@@ -896,7 +897,7 @@ class DichotomyIR(nn.Module):
                  upsampler='',
                  resi_connection='1conv',
                  **kwargs):
-        super(DichotomyIR, self).__init__()
+        super(DichotomyIRV6, self).__init__()
         num_in_ch = in_chans
         num_out_ch = in_chans*8
         num_feat = 64
