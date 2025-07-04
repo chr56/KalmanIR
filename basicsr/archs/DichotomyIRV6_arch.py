@@ -391,19 +391,15 @@ class SS2D_b(nn.Module):
 
 
 class BackboneVSSM(VSSM):
-    def __init__(self, norm_layer: nn.Module, channel_first=True, **kwargs):
+    def __init__(self, channel_first=True, **kwargs):
         super().__init__(**kwargs)
         del self.classifier
         self.channel_first = channel_first
-        for i, dim in enumerate(self.dims):
-            self.add_module(name=f'output_norm_layer_{i}', module=norm_layer(dim))
 
     def forward(self, x: torch.Tensor):
         x = self.patch_embed(x)
         for i, layer in enumerate(self.layers):
             x = layer.blocks(x)
-            norm_layer = getattr(self, f'output_norm_layer_{i}')
-            x = norm_layer(x)
         if self.channel_first:
             x = x.permute(0, 3, 1, 2)
         return x
@@ -440,7 +436,7 @@ class DichotomyIRV6(nn.Module):
                  d_state = 16,
                  mlp_ratio=2.,
                  drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm,
+                 norm_layer="LN",
                  patch_norm=True,
                  use_checkpoint=False,
                  upscale=2,
@@ -467,7 +463,6 @@ class DichotomyIRV6(nn.Module):
 
         # ------------------------- 2, deep feature extraction ------------------------- #
         self.embed_dim = embed_dim
-        self.patch_norm = patch_norm
         self.num_features = embed_dim
 
         layers_dim = [embed_dim for _ in range(len(depths))]
@@ -479,10 +474,11 @@ class DichotomyIRV6(nn.Module):
             depths=depths,
             dims=layers_dim,
             ssm_d_state=d_state,
+            patch_norm=patch_norm,
             use_checkpoint=use_checkpoint,
             drop_path_rate=drop_path_rate,
             norm_layer=norm_layer,
-            ssm_init="v0", forward_type="v05_noz",
+            ssm_init="v0", forward_type="v05_noz", use_v2d=True,
         )
 
         # build the last conv layer in the end of all residual groups
