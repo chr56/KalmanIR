@@ -1,28 +1,18 @@
-<p align="center">
-    <img src="assets/logo.png" width="300">
-</p>
+[//]: # (<p align="center">)
+[//]: # (    <img src="assets/logo.png" width="300">)
+[//]: # (</p>)
 
-## MambaIR: A Simple Baseline for Image Restoration with State-Space Model
+## TITLE
 
-### [[Paper](https://arxiv.org/abs/2402.15648)] [[Zhihu(知乎)](https://zhuanlan.zhihu.com/p/684248751)]
-
-
+### [[Paper]()]
 
 
-[Hang Guo](https://github.com/csguoh)\*, [Jinmin Li](https://github.com/THU-Kingmin)\*, [Tao Dai](https://cstaodai.com/), Zhihao Ouyang, Xudong Ren, and [Shu-Tao Xia](https://scholar.google.com/citations?hl=zh-CN&user=koAXTXgAAAAJ)
+> **Abstract:**  
 
 
-
-### Check our paper collection of recent Awesome Mamba work in Low-Level Vision [[here](https://github.com/csguoh/Awesome-Mamba-in-Low-Level-Vision)] :hugs:.
-
-(\*) equal contribution
-
-> **Abstract:**  Recent years have witnessed great progress in image restoration thanks to the advancements in modern deep neural networks e.g. Convolutional Neural Network and Transformer. However, existing restoration backbones are usually limited due to the inherent local reductive bias or quadratic computational complexity. Recently, Selective Structured State Space Model e.g., Mamba, have shown great potential for long-range dependencies modeling with linear complexity, but it is still under-explored in low-level computer vision. In this work, we introduce a simple but strong benchmark model, named MambaIR, for image restoration. In detail, we propose the Residual State Space Block as the core component, which employs convolution and channel attention to enhance capabilities of the vanilla Mamba. In this way, our MambaIR takes advantages of local patch recurrence prior as well as channel interaction to produce restoration-specific feature representation. Extensive experiments demonstrate the superiority of our method, for example, MambaIR outperforms Transformer-based baseline SwinIR by up to 0.36dB, using similar computational cost but with global receptive field. 
-
-
-<p align="center">
-    <img src="assets/pipeline.png" style="border-radius: 15px">
-</p>
+[//]: # (<p align="center">)
+[//]: # (    <img src="assets/pipeline.png" style="border-radius: 15px">)
+[//]: # (</p>)
 
 ⭐If this work is helpful for you, please help star this repo. Thanks!🤗
 
@@ -44,71 +34,23 @@
 
 ## <a name="Real-SR"></a>🔍 Visual Results On Real-world SR
 
-[<img src="assets/imgsli1.png" height="250"/>](https://imgsli.com/MjQ4MzQz) [<img src="assets/imgsli2.png" height="250"/>](https://imgsli.com/MjQ4MzQ2) [<img src="assets/imgsli3.png" height="250"/>](https://imgsli.com/MjQ4MzQ3)
-
-[<img src="assets/imgsli4.png" height="250"/>](https://imgsli.com/MjQ4MzQ5) [<img src="assets/imgsli5.png" height="250"/>](https://imgsli.com/MjQ4MzUx) [<img src="assets/imgsli6.png" height="250"/>](https://imgsli.com/MjQ4MzUz)
-
-
-
+TODO
 
 ## <a name="visual_results"></a>:eyes:Visual Results On Classic Image SR
 
-<p align="center">
-  <img width="800" src="assets/visual_results.png">
-</p>
+TODO
 
 
 ## <a name="news"></a> 🆕 News
 
-- **2024-2-23:** arXiv paper available.
-- **2024-2-27:** This repo is released.
-- **2024-3-01:** Pretrained weights for SR and realDN is available. :tada:
-- **2024-3-08:** The code for ERF visualization and model complexity analysis can be found at `./analysis/` 😄
-- **2024-3-19:** We have updated the code for MambaIR-light. 
-- **2024-3-19:** **The FIRST Mamba-based Real-world SR Model** is now available! Enjoy yourself 😊.
-- **2024-05-24**:🔈🔈🔈We have released a new repository to collect recent works of **Mamba in low-level-vision**, please see [here](https://github.com/csguoh/Awesome-Mamba-in-Low-Level-Vision) if you are instersted ;D
-- **2024-06-10**: We have released the training and testing config files for **Guassian Color Image Denosing**, the pre-trained weights are coming soon 👏
-- **2024-06-10**: We have also updated the **environments installation** instruction [here](#installation) for fast building your own mamba environment for reproduce!
-- **2024-07-01**: :fire: :fire: :fire: Congratulations! Our MambaIR has been accepted by **ECCV 2024**！
-- **2024-07-04**: :kissing_heart: We have released the training and testing config files for JPEG compression artifact reduction tasks.
-- **2024-07-04**: The pretrained weight for **Guassian Color Image Denosing** as well as **JPEG Compression Artifact Reduction** are now availbale [here](#model_summary). The performace of these models is futher improved than the reported one in the paper. And we will update the Arxiv version in the future. Enjoy these new models! :yum:
-
-
-
-
-
 ## <a name="todo"></a> ☑️ TODO
-
-- [x] Build the repo
-- [x] arXiv version
-- [x] Release code
-- [x] Pretrained weights&log_files
-- [x] Add code for complexity analysis and ERF visualization
-- [x] Real-world SR
-- [x] Guassian Color Image Denosing
-- [x] Add Download Link for Visual Results on Common Benckmarks
-- [x] JPEG Compression Artifact Redection
-- [ ] Futher Improvement...
  
 
 ## <a name="model_summary"></a> :page_with_curl: Model Summary
 
 | Model          | Task                 | Test_dataset | PSNR  | SSIM   | model_weights | log_files |
 |----------------|----------------------|--------------|-------|--------| --------- | -------- |
-| MambaIR_SR2    | Classic SR x2        | Urban100     | 34.15 | 0.9446 | [link](https://drive.google.com/file/d/11Kiy_0hmMyDjMvW7MmbUT6tO9n5JrDeB/view?usp=sharing)      | [link](https://drive.google.com/file/d/1XzBkBPPb5jymKfGQO3yVePVqWxDMuaF1/view?usp=sharing)     |
-| MambaIR_SR3    | Classic SR x3        | Urban100     | 29.93 | 0.8841 | [link](https://drive.google.com/file/d/1u0VcESEduHu-GBCC6vDGQt9qXSX2AKdn/view?usp=sharing)      | [link](https://drive.google.com/file/d/1cmMwVLfoUiPVlF9uokk1LM6GBpsewZp0/view?usp=sharing)     |
-| MambaIR_SR4    | Classic SR x4        | Urban100     | 27.68 | 0.8287 | [link](https://drive.google.com/file/d/1YXggWIsi-auCjmPQDvW9FjB1f9fZK0hN/view?usp=sharing)      | [link](https://drive.google.com/file/d/18clazq4oVfiQwgPyqRwS3k89htbg3Btg/view?usp=sharing)     |
-| MambaIR_light2 | Lightweight SR x2    | Urban100     | 32.92 | 0.9356 | [link](https://drive.google.com/file/d/1kMCxoD-WEWaLcADJ7ZKV5B7jPpiYBkC2/view?usp=sharing)      | [link](https://drive.google.com/file/d/14cyT7vCvbCjWrtlYzFhXKc0OVBccRFU6/view?usp=sharing)     |
-| MambaIR_light3 | Lightweight SR x3    | Urban100     | 29.00 | 0.8689 | [link](https://drive.google.com/file/d/1emoHPdBca99_7yx09kuTOCXU3nMOnBY-/view?usp=sharing)      | [link](https://drive.google.com/file/d/1a_zIDyyQA69ZsZiKOubj2EpvLCnH_9pO/view?usp=sharing)     |
-| MambaIR_light4 | Lightweight SR x4    | Urban100     | 26.75 | 0.8051 | [link](https://drive.google.com/file/d/1Qv_jTuP2P5tTaGQ8SgQuB7W9Cl-YPqH5/view?usp=sharing)      | [link](https://drive.google.com/file/d/1W7jbbyao7d9Jw3AY9MEIt_eW-od92Seq/view?usp=sharing)     |
-| MambaIR_realDN | Real image Denoising | SIDD         | 39.89 | 0.960  | [link](https://drive.google.com/file/d/1iMcapgaT7VPfR2UFYy21KbX3rUHFJCU8/view?usp=sharing)      | [link](https://drive.google.com/file/d/1FZ0ZOw5gXRs1hGMzm_21QDs0q_3rCtix/view?usp=sharing)     |
-| MambaIR_realSR | Real-world SR        | RealSRSet    | -     | -      | [link](https://drive.google.com/file/d/16BBSRz1HellkTgypu4wu3CHA20CLgpSY/view?usp=sharing)      | [link](https://drive.google.com/file/d/13KNqh3WCn-Lx4gJ8X1K9l8MRERjjcqGw/view?usp=sharing)     |
-| MambaIR_guassian15 | Guassian Denosing        | Urban100    | 35.17    | -      | [link](https://drive.google.com/file/d/1w5Y502iKSkqhP-OpleppPmk6PAnvWPdr/view?usp=sharing)      | [link](https://drive.google.com/file/d/1Gv3M0IVAp8FrxgOC0LyPuwFaUz_05OVa/view?usp=sharing)     |
-| MambaIR_guassian25 | Guassian Denosing      | Urban100    | 32.99     | -      | [link]()      | [link](https://drive.google.com/file/d/1qSPy6B7Jvi7PDHM1fl8Q88kn7ckwtusK/view?usp=sharing)     |
-| MambaIR_guassian50 | Guassian Denosing       | Urban100    | 30.07     | -      | [link]()      | [link](https://drive.google.com/file/d/1O2o9xPruX8MtUL4qmuxV4Vfsef8L_jLM/view?usp=sharing)     |
-| MambaIR_JEPG10 | JPEG CAR        | Classic5    | 30.27   |   0.8256    | [link](https://drive.google.com/file/d/1kncutEIAq9MvD8w6If6VZD7hkRkRcXWr/view?usp=sharing)      | [link](https://drive.google.com/file/d/1iGJe6r-H2I0uhKFMi7DQ2bmBP_dWHoV9/view?usp=sharing)     |
-| MambaIR_JPEG30 | JPEG CAR      | Classic5   | 33.74  | 0.8965      | [link](https://drive.google.com/file/d/1hIIJQR59XmizMapxLOWtihhF3R7prYu3/view?usp=sharing)      | [link](https://drive.google.com/file/d/1Z8XSj92bwPlPgUcj0eNt6KQ5HP3Rv0dl/view?usp=sharing)     |
-| MambaIR_JPEG40 | JPEG CAR       | Classic5    | 34.53  | 0.9084    | [link](https://drive.google.com/file/d/1XbuIsLuCtwV78cVMYLuWXm-hNQDsbn6M/view?usp=sharing)      | [link](https://drive.google.com/file/d/1B99jXE_S9c_S0xefGnZm9WZP3dgYy4bR/view?usp=sharing)     |
+
 
 
 
@@ -412,12 +354,6 @@ python basicsr/test.py -opt options/test/test_MambaIR_JPEG_q40.yml
 Please cite us if our work is useful for your research.
 
 ```
-@inproceedings{guo2024mambair,
-    title={MambaIR: A Simple Baseline for Image Restoration with State-Space Model},
-    author={Guo, Hang and Li, Jinmin and Dai, Tao and Ouyang, Zhihao and Ren, Xudong and Xia, Shu-Tao},
-    booktitle={ECCV},
-    year={2024}
-}
 ```
 
 ## License
@@ -426,9 +362,9 @@ This project is released under the [Apache 2.0 license](LICENSE).
 
 ## Acknowledgement
 
-This code is based on [BasicSR](https://github.com/XPixelGroup/BasicSR), [ART](https://github.com/gladzhang/ART) ,and [VMamba](https://github.com/MzeroMiko/VMamba). Thanks for their awesome work.
+This code is based on [BasicSR](https://github.com/XPixelGroup/BasicSR), [ART](https://github.com/gladzhang/ART) ,and [VMamba](https://github.com/MzeroMiko/VMamba) and [MambaIR](https://github.com/csguoh/MambaIR). Thanks for their awesome work.
 
 ## Contact
 
-If you have any questions, feel free to approach me at cshguo@gmail.com
+If you have any questions, feel free to approach me at TODO
 
