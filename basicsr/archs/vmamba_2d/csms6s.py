@@ -7,32 +7,40 @@ import warnings
 
 
 WITH_SELECTIVESCAN_OFLEX = True
-WITH_SELECTIVESCAN_CORE = False
+WITH_SELECTIVESCAN_CORE = True
 WITH_SELECTIVESCAN_MAMBA = True
-try:
-    import selective_scan_cuda_oflex
-except ImportError:
-    WITH_SELECTIVESCAN_OFLEX = False
-    warnings.warn("Can not import selective_scan_cuda_oflex. This affects speed.")
-    print("Can not import selective_scan_cuda_oflex. This affects speed.", flush=True)
-try:
-    import selective_scan_cuda_core
-except ImportError:
-    WITH_SELECTIVESCAN_CORE = False
-try:
-    import selective_scan_cuda
-except ImportError:
-    WITH_SELECTIVESCAN_MAMBA = False
+WITH_SELECTIVESCAN_V2DMAMBA = True
+
+import sys
+
+_current_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(_current_path)
+print(f"Append {_current_path} to sys.path!")
 
 try:
-    # import sys
-    # sys.path.append("../../..")
-    #import sys
-    #sys.path.append("/gpfs/home/jingwezhang/Projects/VMamba")  # "../../..")
-    from basicsr.archs.mamba_mil.pscan import *
-    # import v2dmamba_scan
-except ImportError:
-    raise ImportError("Can not import v2dmamba_scan.")
+    import selective_scan_cuda_oflex
+except ImportError as e:
+    WITH_SELECTIVESCAN_OFLEX = False
+    print("backend kernel selective_scan_cuda_oflex is not available! ", e)
+
+try:
+    import selective_scan_cuda_core
+except ImportError as e:
+    WITH_SELECTIVESCAN_CORE = False
+    print("backend kernel selective_scan_cuda_core is not available! ", e)
+
+try:
+    import selective_scan_cuda
+except ImportError as e:
+    WITH_SELECTIVESCAN_MAMBA = False
+    print("backend kernel selective_scan_cuda is not available! ", e)
+
+try:
+    import v2dmamba_scan
+except ImportError as e:
+    WITH_SELECTIVESCAN_V2DMAMBA = False
+    print("backend kernel v2dmamba_scan is not available! ", e)
+    raise e
 
 DEBUG_NAN = False
 #DEBUG_NAN = False
