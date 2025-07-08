@@ -391,15 +391,19 @@ class SS2D_b(nn.Module):
 
 
 class BackboneVSSM(VSSM):
-    def __init__(self, channel_first=True, **kwargs):
+    def __init__(self, norm_layer: nn.Module, channel_first=True, **kwargs):
         super().__init__(**kwargs)
         del self.classifier
         self.channel_first = channel_first
+        for i, dim in enumerate(self.dims):
+            self.add_module(name=f'output_norm_layer_{i}', module=norm_layer(dim))
 
     def forward(self, x: torch.Tensor):
         x = self.patch_embed(x)
         for i, layer in enumerate(self.layers):
             x = layer.blocks(x)
+            norm_layer = getattr(self, f'output_norm_layer_{i}')
+            x = norm_layer(x)
         if self.channel_first:
             x = x.permute(0, 3, 1, 2)
         return x
@@ -436,7 +440,7 @@ class DichotomyIRV6(nn.Module):
                  d_state = 16,
                  mlp_ratio=2.,
                  drop_path_rate=0.1,
-                 norm_layer="LN",
+                 norm_layer=nn.LayerNorm,
                  patch_norm=True,
                  use_checkpoint=False,
                  upscale=2,
