@@ -594,8 +594,8 @@ class VSSBlock(nn.Module):
             dt_scale=1.0,
             dt_init_floor=1e-4,
             use_v2d=True,
-            initialize="v0",
-            forward_type="v05_noz",
+            initialize="v2",
+            forward_type="v05",
             channel_first=False,
             feature_size=feature_size,
             **kwargs
