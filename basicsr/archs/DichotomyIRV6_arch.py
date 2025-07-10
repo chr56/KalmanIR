@@ -482,7 +482,7 @@ class DichotomyIRV6(nn.Module):
             use_checkpoint=use_checkpoint,
             drop_path_rate=drop_path_rate,
             norm_layer=norm_layer,
-            ssm_init="v0", forward_type="v05_noz", use_v2d=True,
+            ssm_init="v2", forward_type="v05", use_v2d=True,
         )
 
         # build the last conv layer in the end of all residual groups
