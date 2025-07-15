@@ -15,16 +15,21 @@ class KalmanFilter(nn.Module):
 
     def __init__(self,
                  emb_dim: int,
+                 image_patch: int = 1,
                  num_attention_heads: int = 2,
                  attention_head_dim: int = 12,
                  num_uncertainty_layers: int = 8,
                  ):
         super().__init__()
 
+        assert image_patch >= 1, "Image patch must be at least 1"
+        self.image_patch = image_patch
+
+        transformer_dim = emb_dim * image_patch * image_patch
         self.uncertainty_estimator = nn.ModuleList(
             [
                 BasicTransformerBlock(
-                    emb_dim,
+                    transformer_dim,
                     num_attention_heads,
                     attention_head_dim,
                 )
@@ -80,7 +85,7 @@ class KalmanFilter(nn.Module):
         z_hat = (1 - kalman_gain) * z_code + kalman_gain * z_prime
         return z_hat
 
-    def calc_gain(self, z_codes):
+    def calc_gain(self, z_codes: torch.Tensor) -> torch.Tensor:
         """
         :param z_codes: Shape [Batch, Sequence, Channel, Height, Weight]
         :return: Shape [Batch, Sequence, Channel, Height, Weight]
@@ -90,12 +95,42 @@ class KalmanFilter(nn.Module):
         image_sequence_length = z_codes.shape[1]
         height, width = z_codes.shape[3:5]
 
-        # Assume input shape of uncertainty_estimator to be [(b f) d c]
-        z_reshaped = rearrange(z_codes, "b f c h w -> (b f) (h w) c")
-        h_codes = z_reshaped
+        assert height % self.image_patch == 0 and width % self.image_patch == 0, \
+            f"Height ({height}) and width ({width}) must be divisible by {self.image_patch}"
+
+        ################# Uncertainty Estimation #################
+
+        #### reshape
+        if self.image_patch > 1:
+            z_reshaped = rearrange(
+                z_codes,
+                "b f c (h ph) (w pw) -> (b f) (h w) (c ph pw)", ph=self.image_patch, pw=self.image_patch)
+        else:
+            z_reshaped = rearrange(
+                z_codes,
+                "b f c h w -> (b f) (h w) c"
+            )
+            pass
+        h_codes = z_reshaped  # uncertainty_estimator takes [n d c] as input
+
+        #### Pass Uncertainty Estimator
         for block in self.uncertainty_estimator:
             h_codes = block(h_codes, sequence_length=image_sequence_length)
-        h_codes = rearrange(h_codes, "(b f) (h w) c -> (b f) c h w", h=height, f=image_sequence_length)
+
+        ### reshape
+        if self.image_patch > 1:
+            patch_height = height // self.image_patch
+            h_codes = rearrange(
+                h_codes,
+                "n (h w) (c ph pw) -> n c (h ph) (w pw)", ph=self.image_patch, pw=self.image_patch, h=patch_height,
+            )
+        else:
+            h_codes = rearrange(
+                h_codes,
+                "n (h w) c -> n c h w", h=height
+            )
+
+        ################# Kalman Gain Calculation #################
 
         w_codes = self.kalman_gain_calculator(h_codes)
         w_codes = rearrange(w_codes, "(b f) c h w -> b f c h w", f=image_sequence_length)

@@ -18,6 +18,7 @@ class KalmanRefineNetV0(nn.Module):
 
         self.kalman_filter = KalmanFilter(
             emb_dim=dim,
+            image_patch=8,
         )
 
     # noinspection PyPep8Naming
