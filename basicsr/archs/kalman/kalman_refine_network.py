@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from einops import rearrange
 
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
@@ -13,14 +14,15 @@ class KalmanRefineNetV0(nn.Module):
     - No post-processing after updating
     """
 
-    def __init__(self, dim: int):
+    def __init__(
+            self,
+            dim: int,
+    ):
         super().__init__()
-
-        image_patch = 8
-        dim_stacked = dim * image_patch * image_patch
-
-        uncertainty_estimator = UncertaintyEstimator(
-            dim=dim_stacked,
+        self.image_patch = 8
+        self.dim_stacked = dim * self.image_patch * self.image_patch
+        self.uncertainty_estimator = UncertaintyEstimator(
+            dim=self.dim_stacked,
             num_attention_heads=2,
             attention_head_dim=12,
             num_uncertainty_layers=8
@@ -41,8 +43,6 @@ class KalmanRefineNetV0(nn.Module):
         )
 
         self.kalman_filter = KalmanFilter(
-            image_patch=image_patch,
-            uncertainty_estimator=uncertainty_estimator,
             kalman_gain_calculator=kalman_gain_calculator,
             predictor=predictor,
         )
@@ -55,7 +55,8 @@ class KalmanRefineNetV0(nn.Module):
         assert z.dim() == 5, f"Expected 5 dimension but got {z.shape}"
         B, L, C, H, W = z.shape
 
-        kalman_gain = self.kalman_filter.calc_gain(z)
+        uncertainty = self.calculate_uncertainty(z)
+        kalman_gain = self.kalman_filter.calc_gain(uncertainty, B)
 
         z_hat = None
         previous_z = None
@@ -70,3 +71,46 @@ class KalmanRefineNetV0(nn.Module):
             pass
 
         return z_hat
+
+    def calculate_uncertainty(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        :param z: input, shape [B, L, C, H, W]
+        :return: Stacked uncertainty, shape [B*L, C, H, W]
+        """
+
+        _, image_sequence_length, _, height, width = z.shape
+
+        if self.uncertainty_estimator is None:
+            return rearrange(z, "b f c h w -> (b f) c h w")
+
+        ### reshape
+        if self.image_patch > 1:
+            assert height % self.image_patch == 0 and width % self.image_patch == 0, \
+                f"Height ({height}) and width ({width}) must be divisible by {self.image_patch}"
+            z = rearrange(
+                z,
+                "b f c (h ph) (w pw) -> (b f) (h w) (c ph pw)", ph=self.image_patch, pw=self.image_patch)
+        else:
+            z = rearrange(
+                z,
+                "b f c h w -> (b f) (h w) c"
+            )
+            pass
+
+        # uncertainty_estimator takes [n d c] and image_sequence_length as input
+        uncertainty: torch.Tensor = self.uncertainty_estimator(z, image_sequence_length=image_sequence_length)
+
+        ### reshape
+        if self.image_patch > 1:
+            patch_height = height // self.image_patch
+            uncertainty = rearrange(
+                uncertainty,
+                "n (h w) (c ph pw) -> n c (h ph) (w pw)", ph=self.image_patch, pw=self.image_patch, h=patch_height,
+            )
+        else:
+            uncertainty = rearrange(
+                uncertainty,
+                "n (h w) c -> n c h w", h=height
+            )
+
+        return uncertainty
