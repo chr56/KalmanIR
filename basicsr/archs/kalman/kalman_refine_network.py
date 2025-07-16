@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from .kalman_filter import KalmanFilter
+from .uncertainty_estimator import UncertaintyEstimator
 
 
 class KalmanRefineNetV0(nn.Module):
@@ -16,9 +17,20 @@ class KalmanRefineNetV0(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
 
+        image_patch = 8
+        dim_stacked = dim * image_patch * image_patch
+
+        uncertainty_estimator = UncertaintyEstimator(
+            dim=dim_stacked,
+            num_attention_heads=2,
+            attention_head_dim=12,
+            num_uncertainty_layers=8
+        )
+
         self.kalman_filter = KalmanFilter(
             emb_dim=dim,
-            image_patch=8,
+            image_patch=image_patch,
+            uncertainty_estimator=uncertainty_estimator
         )
 
     # noinspection PyPep8Naming
