@@ -1,8 +1,7 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 
+from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
 from .uncertainty_estimator import UncertaintyEstimator
 
@@ -27,10 +26,25 @@ class KalmanRefineNetV0(nn.Module):
             num_uncertainty_layers=8
         )
 
+        kalman_gain_calculator = nn.Sequential(
+            ConvolutionalResBlock(dim, dim),
+            ConvolutionalResBlock(dim, dim),
+            ConvolutionalResBlock(dim, dim),
+            nn.Conv2d(dim, 1, kernel_size=1, padding=0),
+            nn.Sigmoid()
+        )
+
+        predictor = nn.Sequential(
+            ConvolutionalResBlock(dim, dim),
+            ConvolutionalResBlock(dim, dim),
+            nn.Sigmoid(),
+        )
+
         self.kalman_filter = KalmanFilter(
-            emb_dim=dim,
             image_patch=image_patch,
-            uncertainty_estimator=uncertainty_estimator
+            uncertainty_estimator=uncertainty_estimator,
+            kalman_gain_calculator=kalman_gain_calculator,
+            predictor=predictor,
         )
 
     # noinspection PyPep8Naming

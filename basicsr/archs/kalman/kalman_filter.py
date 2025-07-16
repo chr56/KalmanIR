@@ -1,9 +1,5 @@
-from typing import Optional
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from diffusers.models.attention import CrossAttention, FeedForward, AdaLayerNorm
 from einops import rearrange
 
 
@@ -14,8 +10,9 @@ class KalmanFilter(nn.Module):
     """
 
     def __init__(self,
-                 emb_dim: int,
-                 image_patch: int = 1,
+                 image_patch: int,
+                 kalman_gain_calculator: nn.Module,
+                 predictor: nn.Module,
                  uncertainty_estimator: nn.Module = None,
                  ):
         super().__init__()
@@ -25,19 +22,9 @@ class KalmanFilter(nn.Module):
 
         self.uncertainty_estimator = uncertainty_estimator
 
-        self.kalman_gain_calculator = nn.Sequential(
-            CNNResBlock(emb_dim, emb_dim),
-            CNNResBlock(emb_dim, emb_dim),
-            CNNResBlock(emb_dim, emb_dim),
-            nn.Conv2d(emb_dim, 1, kernel_size=1, padding=0),
-            nn.Sigmoid()
-        )
+        self.kalman_gain_calculator = kalman_gain_calculator
 
-        self.predictor = nn.Sequential(
-            CNNResBlock(emb_dim, emb_dim),
-            CNNResBlock(emb_dim, emb_dim),
-            nn.Sigmoid(),
-        )
+        self.predictor = predictor
 
         self.apply(self._init_weights)
 
@@ -125,34 +112,3 @@ class KalmanFilter(nn.Module):
         w_codes = rearrange(w_codes, "(b f) c h w -> b f c h w", f=image_sequence_length)
 
         return w_codes
-
-
-class CNNResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels=None):
-        super(CNNResBlock, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = in_channels if out_channels is None else out_channels
-        self.norm1 = nn.GroupNorm(num_groups=in_channels // 4, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = nn.GroupNorm(num_groups=in_channels // 4, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if self.in_channels != self.out_channels:
-            self.conv_out = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
-
-    def forward(self, x_in):
-        x = x_in
-        x = self.norm1(x)
-        x = swish(x)
-        x = self.conv1(x)
-        x = self.norm2(x)
-        x = swish(x)
-        x = self.conv2(x)
-        if self.in_channels != self.out_channels:
-            x_in = self.conv_out(x_in)
-
-        return x + x_in
-
-
-@torch.jit.script
-def swish(x):
-    return x * torch.sigmoid(x)
