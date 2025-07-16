@@ -21,12 +21,13 @@ class KalmanRefineNetV0(nn.Module):
         super().__init__()
         self.image_patch = 8
         self.dim_stacked = dim * self.image_patch * self.image_patch
-        self.uncertainty_estimator = UncertaintyEstimator(
-            dim=self.dim_stacked,
-            num_attention_heads=2,
-            attention_head_dim=12,
-            num_uncertainty_layers=8
-        )
+        # self.uncertainty_estimator = UncertaintyEstimator(
+        #     dim=self.dim_stacked,
+        #     num_attention_heads=2,
+        #     attention_head_dim=12,
+        #     num_uncertainty_layers=8
+        # )
+        self.uncertainty_estimator = None
 
         kalman_gain_calculator = nn.Sequential(
             ConvolutionalResBlock(dim, dim),
