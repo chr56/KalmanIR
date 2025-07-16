@@ -21,7 +21,7 @@ class MambaIRModel(SRModel):
         if w % split_token_w != 0:
             mod_pad_w = split_token_w - w % split_token_w
         img = F.pad(self.lq, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
-        _, _, H, W = img.size()
+        B, _, H, W = img.size()
         split_h = H // split_token_h  # height of each partition
         split_w = W // split_token_w  # width of each partition
         # overlapping
@@ -92,7 +92,7 @@ class MambaIRModel(SRModel):
                         out = out[0]
 
                     outputs.append(out)
-                _img = torch.zeros(1, C, H * scale, W * scale)
+                _img = torch.zeros(B, C, H * scale, W * scale)
                 # merge
                 for i in range(ral):
                     for j in range(row):
