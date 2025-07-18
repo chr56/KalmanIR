@@ -98,6 +98,24 @@ class V2_Loss(nn.Module):
         l1_2 = self.l1(pred_decimal_2, target_decimal)
         return l1_2 + 0.2*l1_1 + 0.1*l1_1_2
 
+class FourierWrapper(nn.Module):
+    def __init__(self,
+                 wrapped_loss: nn.Module,
+                 require_transform_weight: bool = False,
+                 ):
+        super(FourierWrapper, self).__init__()
+        self.wrapped_loss = wrapped_loss
+        self.require_transform_weight = require_transform_weight
+
+    def forward(self, pred, target, weight=None, **kwargs):
+        pred_freq = torch.fft.rfft2(pred, dim=(-2, -1))
+        target_freq = torch.fft.rfft2(target, dim=(-2, -1))
+        if self.require_transform_weight:
+            weight_freq = torch.fft.rfft2(weight, dim=(-2, -1))
+            return self.wrapped_loss(pred_freq, target_freq, weight_freq, **kwargs)
+        else:
+            return self.wrapped_loss(pred_freq, target_freq, weight, **kwargs)
+
 @LOSS_REGISTRY.register()
 class L1FourierGAN_MixedLoss(nn.Module):
     """
@@ -111,6 +129,7 @@ class L1FourierGAN_MixedLoss(nn.Module):
                  weights,
                  binaries,
                  l1_reduction: str = 'mean',
+                 fourier_l1_reduction: str = 'mean',
                  gan_type: str = 'vanilla',
                  gan_real_label_val=1.0,
                  gan_fake_label_val=0.0,
@@ -118,47 +137,48 @@ class L1FourierGAN_MixedLoss(nn.Module):
         super(L1FourierGAN_MixedLoss, self).__init__()
 
         self.l1_weights = weights[0]
-        self.fourier_weights = weights[1]
+        self.fourier_l1_weights = weights[1]
         self.gan_weights = weights[2]
 
-        self.convert_binary_1 = binaries[0]
-        self.convert_binary_2 = binaries[1]
-        self.convert_binary_3 = binaries[2]
+        self.convert_from_binary_1 = binaries[0]
+        self.convert_from_binary_2 = binaries[1]
+        self.convert_from_binary_3 = binaries[2]
 
         self.l1_reduction = l1_reduction
+        self.fourier_l1_reduction = fourier_l1_reduction
         self.gan_type = gan_type
         self.gan_real_label_val = gan_real_label_val
         self.gan_fake_label_val = gan_fake_label_val
 
         self.l1 = L1Loss(reduction=l1_reduction)
-        self.fourier_l1 = FourierLoss()
+        self.fourier_l1 = FourierWrapper(L1Loss(reduction=fourier_l1_reduction))
         self.gan_loss = GANLoss(gan_type, gan_real_label_val, gan_fake_label_val)
 
-    def forward(self, predicted: tuple, target: torch.Tensor, weight=None, **kwargs):
+    def forward(self, pred: tuple, target: torch.Tensor, weight=None, **kwargs):
         """
-        :param predicted: Predicted tensor, containing 3 tensors, of shape (N, C, H, W)
-        :param target: Ground truth tensor, of shape (N, C, H, W)
-        :param weight: (unused)
+        :param pred: Predicted results, containing 3 tensors, of shape (N, C, H, W)
+        :param target: Ground truth, of shape (N, C, H, W)
+        :param weight: Element-wise weights, of shape (N, C, H, W).
         :param kwargs: (unused)
         :return: mixed loss
         """
 
-        refined, a, b = predicted
+        refined, a, b = pred
 
-        if self.convert_binary_1: refined = binary_to_decimal(refined)
-        if self.convert_binary_2: a = binary_to_decimal(a)
-        if self.convert_binary_3: b = binary_to_decimal(b)
+        if self.convert_from_binary_1: refined = binary_to_decimal(refined)
+        if self.convert_from_binary_2: a = binary_to_decimal(a)
+        if self.convert_from_binary_3: b = binary_to_decimal(b)
 
-        loss_l1 = self.l1(refined, target)
-        loss_fourier = self.fourier_l1(a, target)
-        loss_gan = self.gan_loss(b, False) + self.gan_loss(target, True)
+        loss_l1 = self.l1(refined, target, weight)
+        loss_fourier_l1 = self.fourier_l1(a, target)
+        loss_gan = self.gan_loss(b, False) # + self.gan_loss(target, True)
 
-        total = (
+        loss_total = (
                 self.l1_weights * loss_l1 +
-                self.fourier_weights * loss_fourier +
+                self.fourier_l1_weights * loss_fourier_l1 +
                 self.gan_weights * loss_gan
         )
-        return total
+        return loss_total
 
 
 '''
