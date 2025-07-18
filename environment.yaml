@@ -107,6 +107,7 @@ dependencies:
       - google-auth-oauthlib==1.0.0
       - grpcio==1.62.0
       - huggingface-hub==0.21.1
+      - diffusers==0.11.0
       - importlib-metadata==7.0.1
       - importlib-resources==6.1.2
       - kiwisolver==1.4.5
