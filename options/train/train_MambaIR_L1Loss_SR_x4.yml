@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: KalmanIR_V1_V2Loss
+name: MambaIR_L1Loss
 model_type: MambaIRModel
 scale: 4
 num_gpu: 1
@@ -78,7 +78,7 @@ datasets:
 
 # network structures
 network_g:
-  type: KalmanIRV1
+  type: MambaIR
   upscale: 4
   in_chans: 3
   img_size: 32
@@ -120,15 +120,10 @@ train:
 
   # losses
   pixel_opt:
-#    type: L1Loss
-#  loss1:
-#    type: V3_Loss
-#    loss_weight: 1.0
-#    reduction: mean
-#  loss2:
-    type: V2_Loss
+    type: L1Loss
     loss_weight: 1.0
     reduction: mean
+
 # validation settings
 val:
   val_freq: !!float 5e3

@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: DichonomySRV1_LFG_MixedLoss
+name: DichotomyIR_V2Loss
 model_type: MambaIRModel
 scale: 4
 num_gpu: 1
@@ -120,14 +120,9 @@ train:
 
   # losses
   pixel_opt:
-    type: L1FourierGAN_MixedLoss
-    weights: [1, 0.2, 0.1]
-    binaries: [false, false, true]
-    l1_reduction: mean
-    fourier_l1_reduction: mean
-    gan_type: vanilla
-    gan_real_label_val: !!float 1.0
-    gan_fake_label_val: !!float 0.0
+    type: V2_Loss
+    loss_weight: 1.0
+    reduction: mean
 
 # validation settings
 val:
