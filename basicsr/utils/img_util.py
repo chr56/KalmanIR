@@ -2,8 +2,10 @@ import cv2
 import math
 import numpy as np
 import os
+import datetime
 import torch
 from torchvision.utils import make_grid
+from torchvision.transforms import ToPILImage
 
 
 def img2tensor(imgs, bgr2rgb=True, float32=True):
@@ -170,3 +172,16 @@ def crop_border(imgs, crop_border):
             return [v[crop_border:-crop_border, crop_border:-crop_border, ...] for v in imgs]
         else:
             return imgs[crop_border:-crop_border, crop_border:-crop_border, ...]
+
+def dump_images(sr, hr, save_directory: str):
+    current_time = datetime.datetime.now()
+    formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+    pil_transform = ToPILImage()
+    p0 = hr[0]
+    p1 = sr[0]
+    plc0 = pil_transform(p0)
+    plc1 = pil_transform(p1)
+    save_path = os.path.join(save_directory, f'{formatted_time}_HR.png')
+    save_path1 = os.path.join(save_directory, f'{formatted_time}_SR.png')
+    plc0.save(save_path)
+    plc1.save(save_path1)
