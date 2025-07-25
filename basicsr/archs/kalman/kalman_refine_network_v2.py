@@ -22,6 +22,7 @@ class KalmanRefineNetV2(nn.Module):
 
         kalman_gain_calculator = nn.Sequential(
             ConvolutionalResBlock(dim, dim),
+            ConvolutionalResBlock(dim, dim),
             nn.Conv2d(dim, 1, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
@@ -119,16 +120,12 @@ class DifficultZoneEstimator(nn.Module):
         self.channel_compressor = ChannelCompressor(in_channel=channel, out_channel=self.compressed_channel)
 
         self.channel_stacked = 3 * self.compressed_channel + channel
-        self.hidden_estimator_channel = self.channel_stacked // 2
         self.estimator_main = nn.Sequential(
             nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
             nn.Conv2d(self.channel_stacked, self.channel_stacked, kernel_size=3, padding='same'),
             nn.SiLU(inplace=True),
             nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
-            nn.Conv2d(self.channel_stacked, self.hidden_estimator_channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, self.hidden_estimator_channel, eps=1e-6),
-            nn.Conv2d(self.hidden_estimator_channel, 1, kernel_size=3, padding='same'),
+            nn.Conv2d(self.channel_stacked, 1, kernel_size=3, padding='same'),
         )
         self.estimator_residual = nn.Sequential(
             nn.GroupNorm(1, channel, eps=1e-6),
@@ -169,18 +166,19 @@ class DifficultZoneEstimator(nn.Module):
 
         return difficult_zone_mask
 
+
 class UncertaintyEstimator(nn.Module):
     def __init__(
             self, channel: int,
     ):
         super(UncertaintyEstimator, self).__init__()
 
-        self.compressed_sigma_channel = 2
+        self.compressed_sigma_channel = 6
         self.sigma_channel_compressor = ChannelCompressor(in_channel=channel, out_channel=self.compressed_sigma_channel)
 
         self.block = ConvolutionalResBlock(
             channel + self.compressed_sigma_channel + 1, channel,
-            norm_num_groups_1=3, norm_num_groups_2=channel // 4,
+            norm_num_groups_1=1, norm_num_groups_2=1,
         )
 
     def forward(
@@ -201,7 +199,7 @@ class UncertaintyEstimator(nn.Module):
 
         merged = []
         for l in range(sequence_length):
-            stacked = torch.cat((sequence[:, l, ...], difficult_zone_mask, sigma), dim=1)  # -> [B, C', H, W]
+            stacked = torch.cat((difficult_zone_mask, sigma, sequence[:, l, ...]), dim=1)  # -> [B, C', H, W]
             merged.append(
                 self.block(stacked)  # [B, C', H, W] -> [B, C, H, W]
             )
@@ -215,13 +213,22 @@ class ChannelCompressor(nn.Module):
     def __init__(self, in_channel: int, out_channel: int = 6, norm_num_groups=None):
         super(ChannelCompressor, self).__init__()
         num_groups = 1 if norm_num_groups is None else norm_num_groups
-        self.channel_compressor = nn.Sequential(
+        self.norm = nn.GroupNorm(num_groups, in_channel, eps=1e-6)
+        self.main_branch = nn.Sequential(
+            nn.Conv2d(in_channel, in_channel, kernel_size=1, padding='same'),
+            nn.SiLU(inplace=True),
             nn.GroupNorm(num_groups, in_channel, eps=1e-6),
             nn.Conv2d(in_channel, in_channel, kernel_size=1, padding='same'),
             nn.SiLU(inplace=True),
             nn.GroupNorm(num_groups, in_channel, eps=1e-6),
             nn.Conv2d(in_channel, out_channel, kernel_size=1, padding='same'),
         )
+        self.residual_branch = nn.Sequential(
+            nn.Conv2d(in_channel, out_channel, kernel_size=1, padding='same'),
+            nn.SiLU(inplace=True),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.channel_compressor(x)
+        x = self.norm(x)
+        x = self.main_branch(x) + self.residual_branch(x)
+        return x
