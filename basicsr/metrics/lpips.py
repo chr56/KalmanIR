@@ -1,6 +1,10 @@
 import torch
 import lpips
 import numpy as np
+
+from os import devnull
+from contextlib import redirect_stdout
+
 from basicsr.metrics.metric_util import reorder_image
 from basicsr.utils.registry import METRIC_REGISTRY
 
@@ -19,7 +23,10 @@ def calculate_lpips(img, img2, input_order='HWC', model='alex', **kwargs):
         float: LPIPS score.
     """
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    loss_fn = lpips.LPIPS(net=model).to(device)
+
+    with open(devnull, 'w') as f, redirect_stdout(f):
+        loss_fn = lpips.LPIPS(net=model).to(device)  # to mute logs by redirecting stdout
+        pass
 
     # Reorder and normalize
     img = reorder_image(img, input_order=input_order)
