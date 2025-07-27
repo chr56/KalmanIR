@@ -261,10 +261,14 @@ class SRModel(BaseModel):
     def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
         log_str = f'Validation {dataset_name}\n'
         for metric, value in self.metric_results.items():
-            log_str += f'\t # {metric}: {value:.4f}'
+            log_str += f'\t # {metric:5s}: {value:8.4f}  '
             if hasattr(self, 'best_metric_results'):
-                log_str += (f'\tBest: {self.best_metric_results[dataset_name][metric]["val"]:.4f} @ '
-                            f'{self.best_metric_results[dataset_name][metric]["iter"]} iter')
+                best_value = self.best_metric_results[dataset_name][metric]["val"]
+                best_iter = self.best_metric_results[dataset_name][metric]["iter"]
+                if type(best_iter) == int:
+                    log_str += f'\tBest: {best_value :8.4f} @ {best_iter :6d} iter'
+                else:
+                    log_str += f'\tBest: {best_value :8.4f} @ {best_iter}'
             log_str += '\n'
 
         logger = get_root_logger()
