@@ -5,3 +5,5 @@ __pycache__
 tb_logger/
 
 *.so
+
+inception_weights.pth
