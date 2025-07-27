@@ -66,7 +66,7 @@ class KalmanRefineNetV2(nn.Module):
         ##### Difficult Zone Estimation #####
         #####################################
 
-        difference = torch.div(torch.abs(refining - raw_a) + torch.abs(refining - raw_a), 2)
+        difference = torch.div(torch.abs(refining - raw_a) + torch.abs(refining - raw_b), 2)
 
         difficult_zone_mask = self.difficult_zone_estimator(difference, refining, raw_a, raw_b)
 
