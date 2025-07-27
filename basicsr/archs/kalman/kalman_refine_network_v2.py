@@ -116,7 +116,10 @@ class DifficultZoneEstimator(nn.Module):
 
         self.channel = channel
 
-        self.channel_stacked = 4 * channel
+        self.compressed_channel = 6
+        self.channel_compressor = ChannelCompressor(in_channel=channel, out_channel=self.compressed_channel)
+
+        self.channel_stacked = 3 * self.compressed_channel + channel
         self.estimator_main = nn.Sequential(
             nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
             nn.Conv2d(self.channel_stacked, self.channel_stacked, kernel_size=3, padding='same'),
@@ -142,16 +145,22 @@ class DifficultZoneEstimator(nn.Module):
         """
 
         ##################################
-        ######## Stack Channels ##########
+        ###### Compress Channels #########
         ##################################
 
-        stacked = torch.cat((difference, a, b, c), dim=1)  # [B, 4C, H, W]
+        a_compressed = self.channel_compressor(a)
+        b_compressed = self.channel_compressor(b)
+        c_compressed = self.channel_compressor(c)
+
+        stacked = torch.cat((difference, a_compressed, b_compressed, c_compressed), dim=1)  # [B, 3C' + C, H, W]
+
+        del a_compressed, b_compressed, c_compressed
 
         ##################################
         #### Difficult Zone Estimation ###
         ##################################
 
-        # [B, 4C, H, W] -> [B, 1, H, W]
+        # [B, 3C' + C, H, W] -> [B, 1, H, W]
         # [B, C, H, W] -> [B, 1, H, W]
         difficult_zone_mask = self.estimator_main(stacked) + self.estimator_residual(difference)
 
@@ -159,11 +168,16 @@ class DifficultZoneEstimator(nn.Module):
 
 
 class UncertaintyEstimator(nn.Module):
-    def __init__(self, channel: int, ):
+    def __init__(
+            self, channel: int,
+    ):
         super(UncertaintyEstimator, self).__init__()
 
+        self.compressed_sigma_channel = 6
+        self.sigma_channel_compressor = ChannelCompressor(in_channel=channel, out_channel=self.compressed_sigma_channel)
+
         self.block = ConvolutionalResBlock(
-            channel + channel + 1, channel,
+            channel + self.compressed_sigma_channel + 1, channel,
             norm_num_groups_1=1, norm_num_groups_2=1,
         )
 
@@ -181,9 +195,11 @@ class UncertaintyEstimator(nn.Module):
         """
         _, sequence_length, _, _, _ = sequence.shape
 
+        sigma = self.sigma_channel_compressor(sigma)  # [B, C, H, W] -> [B, C_compressed, H, W]
+
         merged = []
         for l in range(sequence_length):
-            stacked = torch.cat((difficult_zone_mask, sequence[:, l, ...], sigma), dim=1)  # -> [B, 2C+1, H, W]
+            stacked = torch.cat((difficult_zone_mask, sigma, sequence[:, l, ...]), dim=1)  # -> [B, C', H, W]
             merged.append(
                 self.block(stacked)  # [B, C', H, W] -> [B, C, H, W]
             )
