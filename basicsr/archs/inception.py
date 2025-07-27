@@ -79,11 +79,7 @@ class InceptionV3(nn.Module):
         if use_fid_inception:
             inception = fid_inception_v3()
         else:
-            try:
-                inception = models.inception_v3(pretrained=True, init_weights=False)
-            except TypeError:
-                # pytorch < 1.5 does not have init_weights for inception_v3
-                inception = models.inception_v3(pretrained=True)
+            inception = models.inception_v3(weights=models.Inception_V3_Weights.IMAGENET1K_V1, init_weights=False)
 
         # Block 0: input to maxpool1
         block0 = [
@@ -162,11 +158,7 @@ def fid_inception_v3():
     This method first constructs torchvision's Inception and then patches the
     necessary parts that are different in the FID Inception model.
     """
-    try:
-        inception = models.inception_v3(num_classes=1008, aux_logits=False, pretrained=False, init_weights=False)
-    except TypeError:
-        # pytorch < 1.5 does not have init_weights for inception_v3
-        inception = models.inception_v3(num_classes=1008, aux_logits=False, pretrained=False)
+    inception = models.inception_v3(num_classes=1008, aux_logits=False, weights=None, init_weights=False)
 
     inception.Mixed_5b = FIDInceptionA(192, pool_features=32)
     inception.Mixed_5c = FIDInceptionA(256, pool_features=64)
