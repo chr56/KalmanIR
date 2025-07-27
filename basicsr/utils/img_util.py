@@ -155,6 +155,101 @@ def imwrite(img, file_path, params=None, auto_mkdir=True):
         raise IOError('Failed in writing images.')
 
 
+def calculate_and_padding_image(img, patch_size=200):
+    _, _, raw_h, raw_w = img.size()
+
+    num_patch_h = raw_h // patch_size + 1  # number of horizontal cut sections
+    num_patch_w = raw_w // patch_size + 1  # number of vertical cut sections
+
+    # padding
+    padding_h, padding_w = 0, 0
+    if raw_h % num_patch_h != 0:
+        padding_h = num_patch_h - raw_h % num_patch_h
+    if raw_w % num_patch_w != 0:
+        padding_w = num_patch_w - raw_w % num_patch_w
+    img = torch.nn.functional.pad(img, (0, padding_w, 0, padding_h), 'reflect')
+
+    _, _, H, W = img.size()
+    patch_h = H // num_patch_h  # height of each patch
+    patch_w = W // num_patch_w  # width of each patch
+    col = H // patch_h  # number of patches in height
+    row = W // patch_w  # number of patches in width
+    # overlapping
+    shave_h = patch_h // 10
+    shave_w = patch_w // 10
+    return img, col, row, padding_h, padding_w, patch_h, patch_w, shave_h, shave_w
+
+
+def calculate_borders_for_chopping(
+        total_col: int, total_row: int,
+        patch_h: int, patch_w: int,
+        shave_h: int, shave_w: int,
+) -> list:
+    slices = []  # list of partition borders
+    for i in range(total_col):
+        for j in range(total_row):
+            if i == 0 and i == total_col - 1:
+                h_range = slice(i * patch_h, (i + 1) * patch_h)
+            elif i == 0:
+                h_range = slice(i * patch_h, (i + 1) * patch_h + shave_h)
+            elif i == total_col - 1:
+                h_range = slice(i * patch_h - shave_h, (i + 1) * patch_h)
+            else:
+                h_range = slice(i * patch_h - shave_h, (i + 1) * patch_h + shave_h)
+            if j == 0 and j == total_row - 1:
+                w_range = slice(j * patch_w, (j + 1) * patch_w)
+            elif j == 0:
+                w_range = slice(j * patch_w, (j + 1) * patch_w + shave_w)
+            elif j == total_row - 1:
+                w_range = slice(j * patch_w - shave_w, (j + 1) * patch_w)
+            else:
+                w_range = slice(j * patch_w - shave_w, (j + 1) * patch_w + shave_w)
+            box = (h_range, w_range)
+            slices.append(box)
+    return slices
+
+
+def recover_from_patches(
+        patches,
+        total_col: int, total_row: int,
+        batch_size: int, channel: int, lq_width: int, lq_height: int, sr_scale,
+        patch_h: int, patch_w: int, shave_h: int, shave_w: int,
+) -> torch.Tensor:
+    _img = torch.zeros(batch_size, channel, lq_height * sr_scale, lq_width * sr_scale)
+    for i in range(total_col):
+        for j in range(total_row):
+            target_h_range = slice(i * patch_h * sr_scale, (i + 1) * patch_h * sr_scale)
+            target_w_range = slice(j * patch_w * sr_scale, (j + 1) * patch_w * sr_scale)
+            if i == 0:
+                h_range = slice(0, patch_h * sr_scale)
+            else:
+                h_range = slice(shave_h * sr_scale, (shave_h + patch_h) * sr_scale)
+            if j == 0:
+                w_range = slice(0, patch_w * sr_scale)
+            else:
+                w_range = slice(shave_w * sr_scale, (shave_w + patch_w) * sr_scale)
+            _img[..., target_h_range, target_w_range] = patches[i * total_row + j][..., h_range, w_range]
+    return _img
+
+
+def recover_from_patches_and_remove_paddings(
+        patches,
+        total_col: int, total_row: int,
+        batch_size: int, channel: int, lq_width: int, lq_height: int, sr_scale,
+        patch_h: int, patch_w: int, shave_h: int, shave_w: int,
+        padding_h: int, padding_w: int, scale,
+) -> torch.Tensor:
+    recovered = recover_from_patches(
+        patches,
+        total_col, total_row,
+        batch_size, channel, lq_width, lq_height, sr_scale,
+        patch_h, patch_w, shave_h, shave_w,
+    )
+    _, _, h, w = recovered.size()
+    recovered = recovered[:, :, 0:h - padding_h * scale, 0:w - padding_w * scale]
+    return recovered
+
+
 def crop_border(imgs, crop_border):
     """Crop borders of images.
 
