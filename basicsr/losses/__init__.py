@@ -5,7 +5,7 @@ from basicsr.utils.registry import LOSS_REGISTRY
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
     V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
-    L1FourierGAN_MixedLoss,
+    L1FourierGAN_MixedLoss, LFBG_MixedLoss,
 )
 from .primitive_losses import (
     L1Loss, MSELoss, CharbonnierLoss, WeightedTVLoss,
@@ -23,7 +23,7 @@ __all__ = [
     # Customs
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
     'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
-    'L1FourierGAN_MixedLoss',
+    'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss'
 ]
 
 

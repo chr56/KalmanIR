@@ -350,3 +350,90 @@ class L1FourierGAN_MixedLoss(nn.Module):
                 self.gan_weights * loss_gan
         )
         return loss_total
+
+@LOSS_REGISTRY.register()
+class LFBG_MixedLoss(nn.Module):
+    """
+    Mixed loss:
+    - L1 Loss
+    - Fourier L1 Loss
+    - BCE Loss with GAN Loss
+    """
+
+    def __init__(self,
+                 weights,
+                 binaries,
+                 l1_reduction: str = 'mean',
+                 fourier_l1_reduction: str = 'mean',
+                 bce_reduction: str = 'mean',
+                 gan_type: str = 'vanilla',
+                 gan_real_label_val=1.0,
+                 gan_fake_label_val=0.0,
+                 ):
+        super(LFBG_MixedLoss, self).__init__()
+
+        self.l1_weights = weights[0]
+        self.fourier_l1_weights = weights[1]
+        self.bce_weights = weights[2]
+        self.gan_weights = weights[3]
+
+        assert not isinstance(binaries, str), "`binaries` must not be a string"
+        assert hasattr(binaries, "__getitem__"), "`binaries` must be a sequence"
+        assert len(binaries) > 0 and type(binaries[0]) is bool, "content of `binaries` must be boolean"
+        if len(binaries) == 3:
+            self.three_way_prediction_output = True
+            self.should_convert_binaries = binaries
+        elif len(binaries) == 1:
+            self.three_way_prediction_output = False
+            self.should_convert_binary = binaries[0]
+        else:
+            raise ValueError(f"`binaries` must has length 1 or 3 but got {len(binaries)}")
+
+        self.l1_reduction = l1_reduction
+        self.fourier_l1_reduction = fourier_l1_reduction
+        self.gan_type = gan_type
+        self.gan_real_label_val = gan_real_label_val
+        self.gan_fake_label_val = gan_fake_label_val
+
+        self.l1 = L1Loss(reduction=l1_reduction)
+        self.fourier_l1 = FourierWrapper(L1Loss(reduction=fourier_l1_reduction))
+
+        self.bce = BCELoss(reduction=bce_reduction)
+        self.gan_loss = GANLoss(gan_type, gan_real_label_val, gan_fake_label_val)
+
+    def forward(self,
+                pred: Union[Sequence[torch.Tensor], torch.Tensor],
+                target: torch.Tensor,
+                weight=None, **kwargs):
+        """
+        :param pred: Predicted results, one or multiple, of shape (N, C, H, W)
+        :param target: Ground truth, of shape (N, C, H, W)
+        :param weight: Element-wise weights, of shape (N, C, H, W).
+        :param kwargs: (unused)
+        :return: mixed loss
+        """
+
+        if self.three_way_prediction_output:
+            r, a, b = pred
+            if self.should_convert_binaries[0]: r = binary_to_decimal(r)
+            if self.should_convert_binaries[1]: a = binary_to_decimal(a)
+            if self.should_convert_binaries[2]: b = binary_to_decimal(b)
+            loss_l1 = self.l1(r, target, weight)
+            loss_fourier_l1 = self.fourier_l1(a, target)
+            loss_bce = self.bce(b, target)
+            loss_gan = self.gan_loss(b, True)
+        else:
+            if self.should_convert_binary: pred = binary_to_decimal(pred)
+            loss_l1 = self.l1(pred, target, weight)
+            loss_fourier_l1 = self.fourier_l1(pred, target)
+            loss_bce = self.bce(pred, target)
+            loss_gan = self.gan_loss(pred, True)
+            pass
+
+        loss_total = (
+                self.l1_weights * loss_l1 +
+                self.fourier_l1_weights * loss_fourier_l1 +
+                self.bce_weights * loss_bce +
+                self.gan_weights * loss_gan
+        )
+        return loss_total
