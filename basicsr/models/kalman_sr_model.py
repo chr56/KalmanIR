@@ -1,0 +1,466 @@
+from collections import OrderedDict
+from os import path as osp
+
+import torch
+import torch.nn.functional as F
+from tqdm import tqdm
+
+from basicsr.archs import build_network
+from basicsr.losses import build_loss
+from basicsr.metrics import calculate_metric
+from basicsr.utils import get_root_logger, imwrite, tensor2img
+from basicsr.utils.binary_transform import decimal_to_binary, binary_to_decimal
+from basicsr.utils.img_util import (
+    calculate_and_padding_image,
+    calculate_borders_for_chopping,
+    recover_from_patches_and_remove_paddings
+)
+from basicsr.utils.registry import MODEL_REGISTRY
+from .base_model import BaseModel
+
+
+@MODEL_REGISTRY.register()
+class KalmanSRModel(BaseModel):
+    """
+    SR model for single image super-resolution for Kalman IR.
+    - has multiple image outputs
+    - input and output are partitioned image patches with fixed size when validation.
+    """
+
+    def __init__(self, opt):
+        super(KalmanSRModel, self).__init__(opt)
+
+        # define network
+        self.net_g = build_network(opt['network_g'])
+        self.net_g = self.model_to_device(self.net_g)
+        self.print_network(self.net_g)
+
+        # parse network output settings
+        self.model_output_format = opt['model_output']
+        self.enabled_output_indexes = opt.get('model_output_enabled', None)
+        self.valid_model_output_settings()
+
+        # load pretrained models
+        load_path = self.opt['path'].get('pretrain_network_g', None)
+        if load_path is not None:
+            param_key = self.opt['path'].get('param_key_g', 'params')
+            self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
+
+        if self.is_train:
+            self.init_training_settings()
+
+    def valid_model_output_settings(self):
+        # outputs
+        supported_formats = ['B', 'D']
+        if isinstance(self.model_output_format, list):
+            for f in self.model_output_format:
+                if f not in supported_formats:
+                    raise NotImplementedError(f"Unsupported format: {self.model_output_format}")
+        else:
+            raise ValueError("`model_output` should be a list")
+        # enabled outputs
+        if self.enabled_output_indexes is None:
+            self.enabled_output_indexes = [0]  # enable first output by default
+        elif isinstance(self.enabled_output_indexes, list):
+            for idx in self.enabled_output_indexes:
+                assert isinstance(idx, int) and 0 <= idx < len(self.model_output_format), ValueError(
+                    f"illegal index `{idx}` in `model_output_enabled`: {self.model_output_format}"
+                )
+        else:
+            raise ValueError("`model_output_enabled` should be a list")
+        self.primary_output_index = self.enabled_output_indexes[0]  # first enabled output as primary output
+
+    def init_training_settings(self):
+        self.net_g.train()
+        train_opt = self.opt['train']
+
+        self.ema_decay = train_opt.get('ema_decay', 0)
+        if self.ema_decay > 0:
+            logger = get_root_logger()
+            logger.info(f'Use Exponential Moving Average with decay: {self.ema_decay}')
+            # define network net_g with Exponential Moving Average (EMA)
+            # net_g_ema is used only for testing on one GPU and saving
+            # There is no need to wrap with DistributedDataParallel
+            self.net_g_ema = build_network(self.opt['network_g']).to(self.device)
+            # load pretrained model
+            load_path = self.opt['path'].get('pretrain_network_g', None)
+            if load_path is not None:
+                self.load_network(self.net_g_ema, load_path, self.opt['path'].get('strict_load_g', True), 'params_ema')
+            else:
+                self.model_ema(0)  # copy net_g weight
+            self.net_g_ema.eval()
+
+        # define losses
+        self.require_discriminator = False
+        self.criteria = self.setup_losses(train_opt)
+        if self.require_discriminator:
+            logger = get_root_logger()
+            logger.info('Loading pretrained discriminator...')
+            self.load_pretrained_discriminator(self.opt['network_d'])
+
+        # set up optimizers and schedulers
+        self.setup_optimizers()
+        self.setup_schedulers()
+
+    def setup_losses(self, train_opt) -> dict:
+        criteria = dict()
+        logger = get_root_logger()
+
+        def _extract(name, opt_, key, default):
+            if key not in opt_:
+                get_root_logger().warning(f"`{key}` is not defined in loss `{name}`, use default value `{default}`")
+            value = opt_.get(key, default)
+            return value
+
+        _supported_loss_mode = ['pixel', 'perceptual', 'gan']
+
+        if train_opt.get('losses'):
+            # multiple losses
+            for name, loss_opt in train_opt['losses'].items():
+                if 'loss' not in loss_opt:
+                    logger.error(f"Loss type `{name}` is not defined in loss `{name}`, skipping.")
+                    continue
+                loss_fn = build_loss(loss_opt['loss']).to(self.device)
+
+                loss_target = int(_extract(name, loss_opt, 'target', 0))
+                loss_format = _extract(name, loss_opt, 'format', 'D')
+                loss_mode = str(_extract(name, loss_opt, 'mode', 'pixel'))
+                if loss_mode not in _supported_loss_mode:
+                    logger.error(f"unsupported loss mode `{loss_mode}` in loss `{name}`")
+                    loss_mode = _supported_loss_mode[0]
+                if loss_target < 0 or loss_target >= len(self.model_output_format):
+                    logger.error(f"outraged loss target index `{loss_target}` in loss `{name}`")
+                    loss_target = 0
+
+                if loss_mode == 'gan':
+                    self.require_discriminator = True
+
+                criteria[name] = {
+                    'loss': loss_fn,
+                    'target': loss_target,
+                    'format': loss_format,
+                    'mode': loss_mode,
+                }
+        else:
+            # simple mixed losses
+            if train_opt.get('pixel_opt'):
+                loss_fn = build_loss(train_opt['pixel_opt']).to(self.device)
+                criteria['pixel'] = {
+                    'loss': loss_fn,
+                    'target': None,
+                    'format': 'D',
+                    'mode': 'pixel',
+                }
+            if train_opt.get('perceptual_opt'):
+                loss_fn = build_loss(train_opt['perceptual_opt']).to(self.device)
+                criteria['perceptual'] = {
+                    'loss': loss_fn,
+                    'target': None,
+                    'format': 'D',
+                    'mode': 'perceptual',
+                }
+
+        if len(criteria) == 0:
+            raise ValueError('No losses defined.')
+        logger.info(f"{len(criteria)} losses defined.")
+        return criteria
+
+    def load_pretrained_discriminator(self, disc_opt):
+        self.net_d = build_network(disc_opt)
+        self.net_d = self.model_to_device(self.net_d)
+        pretrained_path = self.opt['path'].get('pretrain_network_d', None)
+        if pretrained_path is not None:
+            param_key = self.opt['path'].get('param_key_d', 'params')
+            self.load_network(
+                self.net_d, pretrained_path, self.opt['path'].get('strict_load_d', True), param_key
+            )
+            self.net_d.eval()
+            for p in self.net_d.parameters():
+                p.requires_grad = False
+        else:
+            raise ValueError("No pretrained discriminator network, GAN Loss not available!")
+
+    def setup_optimizers(self):
+        train_opt = self.opt['train']
+        optim_params = []
+        for k, v in self.net_g.named_parameters():
+            if v.requires_grad:
+                optim_params.append(v)
+            else:
+                logger = get_root_logger()
+                logger.warning(f'Params {k} will not be optimized.')
+
+        optim_type = train_opt['optim_g'].pop('type')
+        self.optimizer_g = self.get_optimizer(optim_type, optim_params, **train_opt['optim_g'])
+        self.optimizers.append(self.optimizer_g)
+
+    def feed_data(self, data):
+        self.lq = data['lq'].to(self.device)
+        self.gt = data['gt'].to(self.device)
+
+    def optimize_parameters(self, current_iter):
+        # scaler = GradScaler()
+        self.optimizer_g.zero_grad()
+        # with autocast():
+        output = self.net_g(self.lq)
+
+        l_total, loss_dict = self.calculate_losses(output, self.criteria)
+
+        l_total.backward()
+        # scaler.scale(l_total).backward()
+
+        self.optimizer_g.step()
+        # scaler.step(self.optimizer_g)
+        # scaler.update()
+        self.log_dict = self.reduce_loss_dict(loss_dict)
+
+        if self.ema_decay > 0:
+            self.model_ema(decay=self.ema_decay)
+
+    def calculate_losses(self, outputs, criteria):
+        """Calculate multiple losses"""
+        l_total = 0
+        loss_dict = OrderedDict()
+        # calculate losses
+        for name, criterion in criteria.items():
+            mode = criterion['mode']
+            target_idx = criterion['target']
+            loss_fn = criterion['loss']
+            target_format = criterion['format']
+            if target_idx is None:
+                # mixed loss
+                sr = outputs
+            else:
+                # specified loss
+                sr = self._convert_format(
+                    outputs[target_idx],
+                    from_format=self.model_output_format[target_idx], to_format=target_format
+                )
+            if mode == 'pixel':
+                gt = self._convert_format(self.gt, from_format='D', to_format=target_format)
+                l_pixel = loss_fn(sr, gt)
+                l_total += l_pixel
+                loss_dict[f'l_{name}'] = l_pixel
+            elif mode == 'perceptual':
+                gt = self._convert_format(self.gt, from_format='D', to_format=target_format)
+                l_perceptual, l_style = loss_fn(sr, gt)
+                if l_perceptual is not None:
+                    l_total += l_perceptual
+                    loss_dict[f'l_{name}' if not l_style else f'l_{name}_perceptual'] = l_perceptual
+                if l_style is not None:
+                    l_total += l_style
+                    loss_dict[f'l_{name}' if not l_perceptual else f'l_{name}_style'] = l_style
+            elif mode == 'gan':
+                with torch.no_grad(): d_out = F.sigmoid(self.net_d(sr))
+                l_gan = loss_fn(d_out, True)
+                l_total += l_gan
+                loss_dict[f'l_{name}'] = l_gan
+            pass
+        return l_total, loss_dict
+
+    def forward_model(self):
+        """Forward model with partitioned lq data"""
+        # padding image and calculate partition parameters
+        img, col, row, mod_pad_h, mod_pad_w, split_h, split_w, shave_h, shave_w = calculate_and_padding_image(self.lq)
+
+        B, C, H, W = img.shape
+        scale = self.opt.get('scale', 1)
+
+        # list of partition borders
+        chopping_boxes = calculate_borders_for_chopping(
+            col, row, split_h, split_w, shave_h, shave_w
+        )
+
+        # list of patches / partitions
+        partitioned_img = []
+        for box in chopping_boxes:
+            h_range, w_range = box
+            partitioned_img.append(img[..., h_range, w_range])
+
+        del chopping_boxes
+
+        output_size = len(self.model_output_format)
+        prediction_patches = {k: [] for k in range(output_size)}
+
+        # image processing of each partition
+        for patch in partitioned_img:
+            raw_outputs = self.net_g(patch) if not hasattr(self, 'net_g_ema') else self.net_g_ema(patch)
+            assert hasattr(raw_outputs, '__len__'), "model output must be iterable"
+            assert len(raw_outputs) == output_size, "model image output size mismatched with settings"
+            for k in self.enabled_output_indexes:
+                patch = self._convert_format(
+                    raw_outputs[k], from_format=self.model_output_format[k], to_format='D'
+                )
+                prediction_patches[k].append(patch)
+                pass
+
+        predictions = dict()
+        for k in self.enabled_output_indexes:
+            predictions[k] = recover_from_patches_and_remove_paddings(
+                prediction_patches[k], col, row,
+                B, C, W, H, scale,
+                split_h, split_w, shave_h, shave_w,
+                mod_pad_h, mod_pad_w, scale
+            )
+
+        self.output_images = predictions
+
+    def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
+        if self.opt['rank'] == 0:
+            self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
+
+    def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
+        dataset_name = dataloader.dataset.opt['name']
+        metrics_opt = self.opt['val'].get('metrics')
+
+        with_metrics = metrics_opt is not None
+        use_pbar = self.opt['val'].get('pbar', False)
+
+        if with_metrics:
+            # zero metric results
+            empty_metric_dict = {metric: 0 for metric in metrics_opt.keys()}
+            self.metric_results = {
+                k: empty_metric_dict.copy() for k in self.enabled_output_indexes  # Output Index >> Metric Name >> Value
+            }
+            # initialize the best metric results for each dataset_name (supporting multiple validation datasets)
+            self._initialize_best_metric_results(dataset_name)
+            del empty_metric_dict
+
+        metric_data = dict()
+        if use_pbar:
+            pbar = tqdm(total=len(dataloader), unit='image')
+
+        if hasattr(self, 'net_g_ema'):
+            self.net_g_ema.eval()
+        else:
+            self.net_g.eval()
+
+        for idx, val_data in enumerate(dataloader):
+            img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
+            self.feed_data(val_data)
+
+            with torch.no_grad():
+                self.forward_model()
+                visuals = self.get_current_visuals()  # convert to ndarray
+                img_gt = visuals['gt']
+                img_sr = visuals['sr']
+
+            # tentative for out of GPU memory
+            del self.gt
+            del self.lq
+            del self.output_images
+            torch.cuda.empty_cache()
+
+            if save_img:
+                for k, img in visuals['sr'].items():
+                    save_img_path = self._saved_image_path(
+                        dataset_name, img_name, current_iter, k + 1
+                    )
+                    imwrite(img, save_img_path)
+
+            if with_metrics:
+                # calculate metrics
+                for sr_index in self.enabled_output_indexes:
+                    for name, opt_ in metrics_opt.items():
+                        metric_data['img'] = img_sr[sr_index]
+                        metric_data['img2'] = img_gt
+                        self.metric_results[sr_index][name] += calculate_metric(metric_data, opt_)
+                    pass
+            if use_pbar:
+                pbar.update(1)
+                pbar.set_description(f'Test {img_name}')
+        if use_pbar:
+            pbar.close()
+
+        if with_metrics:
+            for k, k_metric_results in self.metric_results.items():
+                for metric in k_metric_results.keys():
+                    # reduce metric result
+                    self.metric_results[k][metric] /= (idx + 1)
+                    # update the best metric result for primary output
+                    if k == self.primary_output_index:
+                        self._update_best_metric_result(
+                            dataset_name, metric, k_metric_results[metric], current_iter
+                        )
+
+            self._log_validation_metric_values(current_iter, dataset_name, tb_logger)
+
+        if hasattr(self, 'net_g_ema'):
+            pass  # self.net_g_ema.train()
+        else:
+            self.net_g.train()
+
+    def _saved_image_path(self, dataset_name, img_name, current_iter, extra_suffix) -> str:
+        if self.opt['is_train']:
+            file_name = f'{img_name}_{current_iter:04d}_{extra_suffix}.png'
+        else:
+            suffix = self.opt["val"]["suffix"] if self.opt['val']['suffix'] else self.opt["name"]
+            file_name = f'{img_name}_{suffix}_{extra_suffix}.png'
+        save_img_path = osp.join(self.opt['path']['visualization'], dataset_name, file_name)
+        return save_img_path
+
+    def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
+        log_str = f'\n\t Validation {dataset_name}\n'
+        metric_names = self.opt['val'].get('metrics').keys()
+        log_str += f'\t # Metric \t\t'
+        for metric_name in metric_names:
+            log_str += f'{metric_name:>8s} \t'
+        log_str += '\n'
+        for k, k_metric_results in self.metric_results.items():
+            log_str += f'\t Output {k + 1}: \t'
+            for metric, value in k_metric_results.items():
+                log_str += f'{value:8.4f} \t'
+            log_str += '\n'
+        if hasattr(self, 'best_metric_results'):  # best metric is only for primary output
+            log_str += f'\n\t Best Output {self.primary_output_index + 1}:\t'
+            for metric_name in metric_names:
+                best_value = self.best_metric_results[dataset_name][metric_name]["val"]
+                log_str += f'{best_value:8.4f} \t'
+            log_str += '\n'
+            log_str += f'\t Best Iter:\t'
+            for metric_name in metric_names:
+                best_iter = self.best_metric_results[dataset_name][metric_name]["iter"]
+                if type(best_iter) == int:
+                    log_str += f'{int(best_iter):8d} \t'
+                else:
+                    log_str += f'{str(best_iter):8s} \t'
+            log_str += '\n'
+
+        logger = get_root_logger()
+        logger.info(log_str)
+        if tb_logger:
+            for k, k_metric_results in self.metric_results.items():
+                for metric, value in k_metric_results.items():
+                    tb_logger.add_scalar(f'metrics_{k}/{dataset_name}/{metric}', value, current_iter)
+                    if self.primary_output_index == k:
+                        tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
+
+    def get_current_visuals(self):
+        img_lq = tensor2img(self.lq.detach().cpu())
+        img_gt = tensor2img(self.gt.detach().cpu())
+        img_sr = OrderedDict()
+        for idx, image in self.output_images.items():
+            img_sr[idx] = tensor2img(image.detach().cpu())
+        images = {
+            'lq': img_lq,
+            'gt': img_gt,
+            'sr': img_sr,
+        }
+        return images
+
+    def save(self, epoch, current_iter):
+        if hasattr(self, 'net_g_ema'):
+            self.save_network([self.net_g, self.net_g_ema], 'net_g', current_iter, param_key=['params', 'params_ema'])
+        else:
+            self.save_network(self.net_g, 'net_g', current_iter)
+        self.save_training_state(epoch, current_iter)
+
+    def _convert_format(self, tensor: torch.Tensor, from_format, to_format) -> torch.Tensor:
+        if from_format == to_format:
+            return tensor
+        elif from_format == 'D' and to_format == 'B':
+            return decimal_to_binary(tensor)
+        elif from_format == 'B' and to_format == 'D':
+            return binary_to_decimal(tensor)
+        else:
+            raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
