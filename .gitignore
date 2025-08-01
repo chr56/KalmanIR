@@ -4,6 +4,8 @@ __pycache__
 
 tb_logger/
 
+pretrain_weights/*.pth
+
 *.so
 
 inception_weights.pth

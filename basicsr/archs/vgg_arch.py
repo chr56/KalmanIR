@@ -6,7 +6,7 @@ from torchvision.models import vgg as vgg
 
 from basicsr.utils.registry import ARCH_REGISTRY
 
-VGG_PRETRAIN_PATH = 'experiments/pretrained_models/vgg19-dcbb9e9d.pth'
+VGG_PRETRAIN_PATH = 'pretrain_weights/vgg19-dcbb9e9d.pth'
 NAMES = {
     'vgg11': [
         'conv1_1', 'relu1_1', 'pool1', 'conv2_1', 'relu2_1', 'pool2', 'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2',
@@ -31,25 +31,6 @@ NAMES = {
         'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5'
     ]
 }
-
-
-def insert_bn(names):
-    """Insert bn layer after each conv.
-
-    Args:
-        names (list): The list of layer names.
-
-    Returns:
-        list: The list of layer names with bn layers.
-    """
-    names_bn = []
-    for name in names:
-        names_bn.append(name)
-        if 'conv' in name:
-            position = name.replace('conv', '')
-            names_bn.append('bn' + position)
-    return names_bn
-
 
 @ARCH_REGISTRY.register()
 class VGGFeatureExtractor(nn.Module):
@@ -101,7 +82,7 @@ class VGGFeatureExtractor(nn.Module):
                 max_idx = idx
 
         if os.path.exists(VGG_PRETRAIN_PATH):
-            vgg_net = getattr(vgg, vgg_type)(pretrained=False)
+            vgg_net = getattr(vgg, vgg_type)(weights=None)
             state_dict = torch.load(VGG_PRETRAIN_PATH, map_location=lambda storage, loc: storage)
             vgg_net.load_state_dict(state_dict)
         else:
@@ -159,3 +140,20 @@ class VGGFeatureExtractor(nn.Module):
                 output[key] = x.clone()
 
         return output
+
+def insert_bn(names):
+    """Insert bn layer after each conv.
+
+    Args:
+        names (list): The list of layer names.
+
+    Returns:
+        list: The list of layer names with bn layers.
+    """
+    names_bn = []
+    for name in names:
+        names_bn.append(name)
+        if 'conv' in name:
+            position = name.replace('conv', '')
+            names_bn.append('bn' + position)
+    return names_bn

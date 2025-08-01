@@ -2,16 +2,23 @@ from copy import deepcopy
 
 from basicsr.utils import get_root_logger
 from basicsr.utils.registry import LOSS_REGISTRY
+
+# basic
+from .primitive_losses import (
+    L1Loss, MSELoss, CharbonnierLoss, WeightedTVLoss,
+)
+from .gan_losses import (
+    GANLoss, GANFeatLoss, MultiScaleGANLoss,
+    r1_penalty, g_path_regularize, gradient_penalty_loss
+)
+from .perceptual_losses import (
+    PerceptualLoss
+)
+# complex
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
     V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
     L1FourierGAN_MixedLoss, LFBG_MixedLoss,
-)
-from .primitive_losses import (
-    L1Loss, MSELoss, CharbonnierLoss, WeightedTVLoss,
-    PerceptualLoss,
-    GANLoss, GANFeatLoss, MultiScaleGANLoss,
-    g_path_regularize, gradient_penalty_loss, r1_penalty
 )
 
 __all__ = [

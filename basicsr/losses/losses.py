@@ -6,9 +6,10 @@ from torch import nn as nn
 from basicsr.utils import binary_to_decimal, decimal_to_binary
 from basicsr.utils.img_util import dump_images
 from basicsr.utils.registry import LOSS_REGISTRY
+from .gan_losses import GANLoss
 from .primitive_losses import (
     bce_loss, bce_with_logits_loss,
-    L1Loss, CharbonnierLoss, GANLoss,
+    L1Loss, CharbonnierLoss,
 )
 
 _reduction_modes = ['none', 'mean', 'sum']
