@@ -66,7 +66,6 @@ class KalmanRefineNetV3(nn.Module):
         #####################################
 
         difficult_zone = self.difficult_zone_estimator(refining, raw_a, raw_b)
-        difficult_zone_softmax = F.softmax(difficult_zone, dim=1)
 
         #####################################
         #### Uncertainty & KG Estimation ####
@@ -78,7 +77,7 @@ class KalmanRefineNetV3(nn.Module):
         uncertainty = []
         for i in range(L):
             img_uncertainty = self.uncertainty_estimator(
-                sequence[:, i, ...], difficult_zone_softmax, sigma
+                sequence[:, i, ...], difficult_zone, sigma
             )
             uncertainty.append(img_uncertainty)
         uncertainty = torch.cat(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L * C, H, W]
@@ -110,7 +109,7 @@ class KalmanRefineNetV3(nn.Module):
         ############### Merge ###############
         #####################################
 
-        difficult_zone = torch.tanh(difficult_zone)
+        difficult_zone = torch.sigmoid(difficult_zone)
         refined = (1 - difficult_zone) * refining + difficult_zone * z_hat
 
         return refined
@@ -133,6 +132,7 @@ class DifficultZoneEstimator(nn.Module):
             nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
             nn.Conv2d(self.channel_stacked, channel, kernel_size=3, padding='same'),
         )
+        self.residual_ratio = 0.4
 
     def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         """
@@ -149,19 +149,21 @@ class DifficultZoneEstimator(nn.Module):
         def mean_reduce(d1: torch.Tensor, d2: torch.Tensor) -> torch.Tensor:
             return torch.div(d1 + d2, 2)
 
-        abs_difference = mean_reduce(torch.abs(a - b), torch.abs(b - c))  # [B, C, H, W]
+        ae_difference = mean_reduce(torch.abs(a - b), torch.abs(b - c))  # [B, C, H, W]
+
         # kl_difference = mean_reduce(cal_kl(a, b), cal_kl(b, c)) # [B, C, H, W]
         bce_difference = mean_reduce(cal_bce(b, a), cal_bce(b, c)) # [B, C, H, W]
         cs_difference = mean_reduce(cal_cs(b, a), cal_cs(b, c)) # [B, 1, H, W]
 
-        all_difference = torch.cat((b, cs_difference, abs_difference, bce_difference), dim=1)  # [B, C', H, W]
+        all_difference = torch.cat((b, cs_difference, ae_difference, bce_difference), dim=1)  # [B, C', H, W]
 
         ##################################
         #### Difficult Zone Estimation ###
         ##################################
 
-        # [B, C', H, W] -> [B, C, H, W]
-        difficult_zone = self.estimator_main(all_difference)
+        # ([B, C', H, W] -> [B, C, H, W]) * (1-r) + [B, C, H, W] * r
+        difficult_zone = (self.estimator_main(all_difference) * (1 - self.residual_ratio) +
+                          ae_difference * self.residual_ratio)
 
         return difficult_zone
 
