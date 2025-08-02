@@ -158,6 +158,7 @@ def train_pipeline(root_path):
     # training
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
     data_timer, iter_timer = AvgTimer(), AvgTimer()
+    stage_timer = AvgTimer(window=4)
     start_time = time.time()
 
     for epoch in range(start_epoch, total_epochs + 1):
@@ -197,10 +198,23 @@ def train_pipeline(root_path):
 
             # validation
             if opt.get('val') is not None and (current_iter % opt['val']['val_freq'] == 0):
-                if len(val_loaders) > 1:
-                    logger.warning('Multiple validation datasets are *only* supported by SRModel.')
+                # if len(val_loaders) > 1:
+                #     logger.warning('Multiple validation datasets are *only* supported by SRModel.')
+
+                validation_time = time.time()
+
                 for val_loader in val_loaders:
                     model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
+
+                validation_time = time.time() - validation_time
+                stage_timer.record()
+
+                msg_logger.logger.info(
+                    "\n"
+                    f"\t> Current validation took {validation_time:.1f}s. \n"
+                    f"\t> Current mini epoch took {stage_timer.get_current_time():.1f}s. \n"
+                    f"\t> ETA: {calculate_eta(current_iter, total_iters, start_time)} \n"
+                )
 
             data_timer.start()
             iter_timer.start()
@@ -218,6 +232,14 @@ def train_pipeline(root_path):
             model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
     if tb_logger:
         tb_logger.close()
+
+
+def calculate_eta(current, total, start_time):
+    current_time = time.time()
+    elapsed_duration = current_time - start_time
+    estimated_total_duration = elapsed_duration * (total / current)
+    eta = str(datetime.timedelta(seconds=int(estimated_total_duration - elapsed_duration)))
+    return eta
 
 
 if __name__ == '__main__':
