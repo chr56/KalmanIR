@@ -6,6 +6,7 @@ from torch import nn as nn
 from basicsr.utils import binary_to_decimal, decimal_to_binary
 from basicsr.utils.img_util import dump_images
 from basicsr.utils.registry import LOSS_REGISTRY
+from .perceptual_losses import PerceptualLoss
 from .gan_losses import GANLoss
 from .primitive_losses import (
     bce_loss, bce_with_logits_loss,
@@ -436,5 +437,93 @@ class LFBG_MixedLoss(nn.Module):
                 self.fourier_l1_weights * loss_fourier_l1 +
                 self.bce_weights * loss_bce +
                 self.gan_weights * loss_gan
+        )
+        return loss_total
+
+
+@LOSS_REGISTRY.register()
+class LFP_MixedLoss(nn.Module):
+    """
+    Mixed loss:
+    - L1 Loss
+    - Fourier L1 Loss
+    - Perceptual Loss
+    """
+
+    def __init__(self,
+                 weights,
+                 binaries,
+                 l1_reduction: str = 'mean',
+                 fourier_l1_reduction: str = 'mean',
+                 perceptual_vgg_arch: str = 'vgg19',
+                 perceptual_layer: str = 'relu3_3',
+                 perceptual_criterion: str = 'l1',
+                 ):
+        super(LFP_MixedLoss, self).__init__()
+
+        self.l1_weights = weights[0]
+        self.fourier_l1_weights = weights[1]
+        self.gan_weights = weights[2]
+
+        assert not isinstance(binaries, str), "`binaries` must not be a string"
+        assert hasattr(binaries, "__getitem__"), "`binaries` must be a sequence"
+        assert len(binaries) > 0 and type(binaries[0]) is bool, "content of `binaries` must be boolean"
+        if len(binaries) == 3:
+            self.three_way_prediction_output = True
+            self.should_convert_binaries = binaries
+        elif len(binaries) == 1:
+            self.three_way_prediction_output = False
+            self.should_convert_binary = binaries[0]
+        else:
+            raise ValueError(f"`binaries` must has length 1 or 3 but got {len(binaries)}")
+
+        self.l1_reduction = l1_reduction
+        self.fourier_l1_reduction = fourier_l1_reduction
+
+        self.perceptual_vgg_arch = perceptual_vgg_arch
+        self.perceptual_layer = perceptual_layer
+        self.perceptual_criterion = perceptual_criterion
+
+        self.l1 = L1Loss(reduction=l1_reduction)
+        self.fourier_l1 = FourierWrapper(L1Loss(reduction=fourier_l1_reduction))
+        self.perceptual = PerceptualLoss(
+            layer_weights={perceptual_layer: 1},
+            vgg_type=perceptual_vgg_arch,
+            criterion=perceptual_criterion,
+            perceptual_weight=1.0,
+            style_weight=0., # disable stype loss
+        )
+
+    def forward(self,
+                pred: Union[Sequence[torch.Tensor], torch.Tensor],
+                target: torch.Tensor,
+                weight=None, **kwargs):
+        """
+        :param pred: Predicted results, one or multiple, of shape (N, C, H, W)
+        :param target: Ground truth, of shape (N, C, H, W)
+        :param weight: Element-wise weights, of shape (N, C, H, W).
+        :param kwargs: (unused)
+        :return: mixed loss
+        """
+
+        if self.three_way_prediction_output:
+            r, a, b = pred
+            if self.should_convert_binaries[0]: r = binary_to_decimal(r)
+            if self.should_convert_binaries[1]: a = binary_to_decimal(a)
+            if self.should_convert_binaries[2]: b = binary_to_decimal(b)
+            loss_l1 = self.l1(r, target, weight)
+            loss_fourier_l1 = self.fourier_l1(a, target)
+            loss_perceptual, _ = self.perceptual(b, target)
+        else:
+            if self.should_convert_binary: pred = binary_to_decimal(pred)
+            loss_l1 = self.l1(pred, target, weight)
+            loss_fourier_l1 = self.fourier_l1(pred, target)
+            loss_perceptual, _ = self.perceptual(pred, target)
+            pass
+
+        loss_total = (
+                self.l1_weights * loss_l1 +
+                self.fourier_l1_weights * loss_fourier_l1 +
+                self.gan_weights * loss_perceptual
         )
         return loss_total

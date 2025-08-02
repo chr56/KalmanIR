@@ -18,7 +18,7 @@ from .perceptual_losses import (
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
     V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
-    L1FourierGAN_MixedLoss, LFBG_MixedLoss,
+    L1FourierGAN_MixedLoss, LFBG_MixedLoss, LFP_MixedLoss
 )
 
 __all__ = [
@@ -30,7 +30,7 @@ __all__ = [
     # Customs
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
     'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
-    'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss'
+    'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss', 'LFP_MixedLoss',
 ]
 
 
