@@ -11,9 +11,7 @@ from torchvision import models
 # Inception weights ported to Pytorch from
 # http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz
 FID_WEIGHTS_URL = 'https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/pt_inception-2015-12-05-6726825d.pth'
-LOCAL_FID_WEIGHTS = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 'inception_weights.pth'
-)
+LOCAL_FID_WEIGHTS = "pretrain_weights/inception-fid-weights.pth"
 
 class InceptionV3(nn.Module):
     """Pretrained InceptionV3 network returning feature maps"""
