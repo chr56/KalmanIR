@@ -3,9 +3,8 @@ __pycache__
 .DS_Store
 
 tb_logger/
+experiments/
 
 pretrain_weights/*.pth
 
 *.so
-
-inception_weights.pth
