@@ -1,7 +1,8 @@
 from typing import Union, Tuple, Sequence
 
 import torch
-from torch import nn as nn
+from torch import nn
+from torch.nn import functional as F
 
 from basicsr.utils import binary_to_decimal, decimal_to_binary
 from basicsr.utils.img_util import dump_images
@@ -338,12 +339,12 @@ class L1FourierGAN_MixedLoss(nn.Module):
             if self.should_convert_binaries[2]: b = binary_to_decimal(b)
             loss_l1 = self.l1(r, target, weight)
             loss_fourier_l1 = self.fourier_l1(a, target)
-            loss_gan = self.gan_loss(b, False)  # + self.gan_loss(target, True)
+            loss_gan = self.gan_loss(F.sigmoid(b), False)  # + self.gan_loss(target, True)
         else:
             if self.should_convert_binary: pred = binary_to_decimal(pred)
             loss_l1 = self.l1(pred, target, weight)
             loss_fourier_l1 = self.fourier_l1(pred, target)
-            loss_gan = self.gan_loss(pred, False)  # + self.gan_loss(target, True)
+            loss_gan = self.gan_loss(F.sigmoid(pred), False)  # + self.gan_loss(target, True)
             pass
 
         loss_total = (
