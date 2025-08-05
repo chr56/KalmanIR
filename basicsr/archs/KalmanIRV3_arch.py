@@ -150,7 +150,6 @@ class KalmanIRV3(nn.Module):
 
         decimal_refined = binary_to_decimal(binary_refined)
         decimal_a = binary_to_decimal(binary_a)
-        binary_b = torch.sigmoid(binary_b)
 
         return [decimal_refined, decimal_a, binary_b]
 
