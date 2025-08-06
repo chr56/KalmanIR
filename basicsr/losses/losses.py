@@ -5,7 +5,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from basicsr.utils import binary_to_decimal, decimal_to_binary
-from basicsr.utils.img_util import dump_images
 from basicsr.utils.registry import LOSS_REGISTRY
 from .perceptual_losses import PerceptualLoss
 from .gan_losses import GANLoss
@@ -43,15 +42,19 @@ class FourierLoss(nn.Module):
 
 @LOSS_REGISTRY.register()
 class BCELoss(nn.Module):
-    def __init__(self, loss_weight=1.0, reduction='mean'):
+    def __init__(self, with_sigmoid: bool = False, loss_weight=1.0, reduction='mean'):
         super(BCELoss, self).__init__()
         if reduction not in ['none', 'mean', 'sum']:
             raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
         self.loss_weight = loss_weight
         self.reduction = reduction
+        self.with_sigmoid = with_sigmoid
 
     def forward(self, pred, target, weight=None, **kwargs):
-        return self.loss_weight * bce_loss(pred, target, weight, reduction=self.reduction)
+        if self.with_sigmoid:
+            return self.loss_weight * bce_with_logits_loss(pred, target, reduction=self.reduction)
+        else:
+            return self.loss_weight * bce_loss(pred, target, reduction=self.reduction)
 
 
 @LOSS_REGISTRY.register()
@@ -79,10 +82,10 @@ class BCEFocalLoss(nn.Module):
         """
         pt = torch.clamp(predict, min=self.eps, max=1.0 - self.eps)  # 限制范围防止数值问题 log(0)
 
-        self.dump(
-            binary_to_decimal(torch.logit(pt)),
-            binary_to_decimal(target),
-        )
+        # self.dump(
+        #     binary_to_decimal(torch.logit(pt)),
+        #     binary_to_decimal(target),
+        # )
 
         # 计算 Focal Loss
         loss = - self.alpha * (1 - pt) ** self.gamma * target * torch.log(pt) \
@@ -96,6 +99,7 @@ class BCEFocalLoss(nn.Module):
         return loss
 
     def dump(self, sr, hr):
+        from basicsr.utils.img_util import dump_images
         self.i = self.i + 1
         if self.i % 100 == 0:
             dump_images(sr, hr, save_directory="/data1/hsw/visualization/focal_loss")
