@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, trunc_normal_
-from fvcore.nn import FlopCountAnalysis, flop_count_str, flop_count, parameter_count
 
 DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
 # train speed is slower after enabling this opts.
@@ -1618,6 +1617,8 @@ class VSSM(nn.Module):
         return x
 
     def flops(self, shape=(3, 224, 224), verbose=True):
+
+        from fvcore.nn import flop_count, parameter_count
         # shape = self.__input_shape__[1:]
         supported_ops={
             "aten::silu": None, # as relu is in _IGNORED_OPS
@@ -1930,6 +1931,7 @@ if __name__ == "__main__":
         downsample_version="v3", patchembed_version="v2", 
         use_checkpoint=False, posembed=False, imgsize=224, 
     )
+    from fvcore.nn import parameter_count
     print(parameter_count(model)[""])
     print(model.flops()) # wrong
     model.cuda().train()
