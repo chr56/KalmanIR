@@ -37,7 +37,7 @@ class FourierLoss(nn.Module):
             target (Tensor): of shape (N, C, H, W). Ground truth tensor.
             weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
         """
-        return self.l1(torch.fft.rfft2(pred, dim=(-2, -1)), torch.fft.rfft2(target, dim=(-2, -1)))
+        return self.loss_weight * self.l1(torch.fft.rfft2(pred, dim=(-2, -1)), torch.fft.rfft2(target, dim=(-2, -1)))
 
 
 @LOSS_REGISTRY.register()
