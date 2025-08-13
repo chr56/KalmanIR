@@ -459,7 +459,7 @@ class KalmanSRModel(BaseModel):
         if from_format == to_format:
             return tensor
         elif from_format == 'D' and to_format == 'B':
-            return decimal_to_binary(tensor)
+            return decimal_to_binary((tensor * 255.))
         elif from_format == 'B' and to_format == 'D':
             return binary_to_decimal(tensor)
         else:
