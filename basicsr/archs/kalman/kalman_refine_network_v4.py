@@ -123,7 +123,6 @@ class DifficultZoneEstimator(nn.Module):
 
         self.channel_stacked = 3 * channel + 1
         self.estimator_main = nn.Sequential(
-            nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
             nn.Conv2d(self.channel_stacked, self.channel_stacked, kernel_size=3, padding='same'),
             nn.SiLU(inplace=True),
             nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
@@ -146,14 +145,10 @@ class DifficultZoneEstimator(nn.Module):
         ###### Compress Channels #########
         ##################################
 
-        def mean_reduce(d1: torch.Tensor, d2: torch.Tensor) -> torch.Tensor:
-            return torch.div(d1 + d2, 2)
-
-        ae_difference = mean_reduce(torch.abs(a - b), torch.abs(b - c))  # [B, C, H, W]
-
-        # kl_difference = mean_reduce(cal_kl(a, b), cal_kl(b, c)) # [B, C, H, W]
-        bce_difference = mean_reduce(cal_bce(b, a), cal_bce(b, c)) # [B, C, H, W]
-        cs_difference = mean_reduce(cal_cs(b, a), cal_cs(b, c)) # [B, 1, H, W]
+        ae_difference = calculate_difference(cal_ae, b, a, c)  # [B, C, H, W]
+        # kl_difference = calculate_deference(cal_kl, b, a, c)  # [B, C, H, W]
+        bce_difference = calculate_difference(cal_bce, b, a, c)  # [B, C, H, W]
+        cs_difference = calculate_difference(cal_cs, b, a, c)  # [B, 1, H, W]
 
         all_difference = torch.cat((b, cs_difference, ae_difference, bce_difference), dim=1)  # [B, C', H, W]
 
@@ -212,6 +207,18 @@ class ChannelCompressor(nn.Module):
         return x
 
 
+def calculate_difference(func, value_base: torch.Tensor, value1: torch.Tensor, value2: torch.Tensor) -> torch.Tensor:
+    return layer_norm(mean_reduce(
+        func(value_base, value1),
+        func(value_base, value2),
+    ))
+
+
+def cal_ae(value1, value2) -> torch.Tensor:
+    """Calculate Absolute Error"""
+    return torch.abs(torch.sub(value1, value2))
+
+
 def cal_kl(value1, value2) -> torch.Tensor:
     """Calculate Kullback-Leibler divergence; result's shape remains same."""
     p = torch.log_softmax(value1, dim=1)
@@ -229,3 +236,16 @@ def cal_bce(value1, value2) -> torch.Tensor:
 def cal_cs(value1, value2, dim: int = 1, eps: float = 1e-8) -> torch.Tensor:
     """Calculate Cosine Similarity, taking channel as dimension; result's channel reduces to 1."""
     return F.cosine_similarity(value1, value2, dim, eps).unsqueeze(dim)
+
+
+def mean_reduce(value1: torch.Tensor, value2: torch.Tensor) -> torch.Tensor:
+    """reduce two tensor by mean"""
+    return torch.div(torch.add(value1, value2), 2)
+
+
+def layer_norm(tensor: torch.Tensor) -> torch.Tensor:
+    """
+    :param tensor: shape [B, C, H, W]
+    :return: normal tensor, shape [B, C, H, W]
+    """
+    return F.layer_norm(tensor, tensor.shape[1:])

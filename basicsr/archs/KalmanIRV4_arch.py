@@ -136,22 +136,19 @@ class KalmanIRV4(nn.Module):
                 binary_refining = (binary_a / torch.exp(-sigma_t)) + bias
 
         # binary_refining = binary_refining / self.img_range + self.mean
-        binary_refined = torch.sin(binary_refining)
+        binary_refined_1 = torch.sin(binary_refining)
 
         ##########################################
         # Kalman Filter
         ##########################################
 
-        binary_refined = self.kalman_refine(
-            binary_refined, binary_a, binary_b, sigma_t,
+        binary_refined_2 = self.kalman_refine(
+            binary_refined_1, binary_a, binary_b, sigma_t,
         )
 
         ##########################################
 
-        decimal_refined = binary_to_decimal(binary_refined)
-        decimal_a = binary_to_decimal(binary_a)
-
-        return [decimal_refined, decimal_a, binary_b]
+        return [binary_refined_2, binary_refined_1, binary_a, binary_b]
 
 
 class SS2DChanelFirst(nn.Module):
