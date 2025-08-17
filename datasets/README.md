@@ -9,6 +9,12 @@ For training and testing, we provide the directory structure. You can download t
             |-- X2
             |-- X3
             |-- X4
+    |-- DIV2K
+        |-- HR
+        |-- LR_bicubic
+            |-- X2
+            |-- X3
+            |-- X4
     # color image denoising - train
     |-- DFWB_RGB
         |-- HQ
@@ -28,7 +34,7 @@ For training and testing, we provide the directory structure. You can download t
             |-- 30
             |-- 40  
     # image SR - test
-    |-- SR
+    |-- benchmark
         |-- Set5
             |-- HR
             |-- LR_bicubic

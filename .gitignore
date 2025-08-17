@@ -4,6 +4,7 @@ __pycache__
 
 tb_logger/
 experiments/
+results/
 
 pretrain_weights/*.pth
 
