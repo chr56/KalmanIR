@@ -10,6 +10,7 @@ from basicsr.losses import build_loss
 from basicsr.metrics import calculate_metric
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.binary_transform import decimal_to_binary, binary_to_decimal
+from basicsr.utils.format import TableFormatter
 from basicsr.utils.img_util import (
     calculate_and_padding_image,
     calculate_borders_for_chopping,
@@ -400,40 +401,39 @@ class KalmanSRModel(BaseModel):
         return save_img_path
 
     def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
-        log_str = f'\n\t Validation {dataset_name}\n'
-        metric_names = self.opt['val'].get('metrics').keys()
-        log_str += f'\t # Metric \t\t'
-        for metric_name in metric_names:
-            log_str += f'{metric_name:>8s} \t'
-        log_str += '\n'
-        for k, k_metric_results in self.metric_results.items():
-            log_str += f'\t Output {k + 1}: \t'
-            for metric, value in k_metric_results.items():
-                log_str += f'{value:8.4f} \t'
-            log_str += '\n'
-        if hasattr(self, 'best_metric_results'):  # best metric is only for primary output
-            log_str += f'\n\t Best Output {self.primary_output_index + 1}:\t'
-            for metric_name in metric_names:
-                best_value = self.best_metric_results[dataset_name][metric_name]["val"]
-                log_str += f'{best_value:8.4f} \t'
-            log_str += '\n'
-            log_str += f'\t Best Iter:\t'
-            for metric_name in metric_names:
-                best_iter = self.best_metric_results[dataset_name][metric_name]["iter"]
-                if type(best_iter) == int:
-                    log_str += f'{int(best_iter):8d} \t'
-                else:
-                    log_str += f'{str(best_iter):8s} \t'
-            log_str += '\n'
-
-        logger = get_root_logger()
-        logger.info(log_str)
+        metric_names = self.opt['val']['metrics'].keys()
+        # Printable Log
+        log_str = f'\n\t ### Validation {dataset_name} ###\n'
+        log_str += self._printable_results(
+            metric_names,
+            self.best_metric_results[dataset_name] if hasattr(self, 'best_metric_results') else None,
+        )
+        get_root_logger().info(log_str)
+        # TensorBoard
         if tb_logger:
             for k, k_metric_results in self.metric_results.items():
                 for metric, value in k_metric_results.items():
                     tb_logger.add_scalar(f'metrics_{k}/{dataset_name}/{metric}', value, current_iter)
                     if self.primary_output_index == k:
                         tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
+
+    def _printable_results(self, metric_names, best_metrics) -> str:
+        formatter = TableFormatter(column_width=8, label_width=14, float_precision=4)
+        formatter.header("# Metric", metric_names)
+        for k, k_metric_results in self.metric_results.items():
+            formatter.row_unordered(f"Output {k + 1}:", k_metric_results)
+        if best_metrics:  # best metric is only for primary output
+            best_values = []
+            best_iter = []
+            for metric_name in metric_names:
+                best_values.append(best_metrics[metric_name]["val"])
+                best_iter.append(best_metrics[metric_name]["iter"])
+            formatter.new_line()
+            formatter.row_ordered(f"Best Output {self.primary_output_index + 1}:", best_values)
+            formatter.row_ordered(f"Best Iter {self.primary_output_index + 1}:", best_iter)
+        formatter.new_line()
+        result = formatter.result()
+        return result
 
     def get_current_visuals(self):
         img_lq = tensor2img(self.lq.detach().cpu())
