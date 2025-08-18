@@ -250,7 +250,7 @@ class ResidualGroup(nn.Module):
 ##########################################
 
 # using vmamba_2d
-class PostVSS2D(VSS2D):
+class VSS2ChanelFirst(VSS2D):
     def __init__(self,
                  d_model: int,
                  d_state: int = 16,

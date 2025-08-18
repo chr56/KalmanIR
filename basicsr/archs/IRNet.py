@@ -11,7 +11,7 @@ from timm.models.layers import trunc_normal_
 
 NEG_INF = -1000000
 
-from .modules_mamba import BasicLayer, SS2D_b, SS2D_g
+from .modules_mamba import BasicLayer
 from .modules_common_ir import PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep
 
 
@@ -206,12 +206,10 @@ class IRNet(nn.Module):
         elif self.upsampler == 'pixelshuffledirect':
             # for lightweight SR (to save parameters)
             self.upsample = UpsampleOneStep(upscale, embed_dim, 2*num_out_ch)
-
         else:
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, 2*num_out_ch, 3, 1, 1)
-        self.mamba_g = SS2D_g(d_model=num_out_ch)
-        self.mamba_b = SS2D_b(d_model=num_out_ch)
+
         self.apply(self._init_weights)
 
     def _init_weights(self, m):

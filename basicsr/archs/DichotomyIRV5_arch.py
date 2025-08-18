@@ -11,7 +11,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 NEG_INF = -1000000
 
-from .modules_mamba import BasicLayer, SS2D_g
+from .modules_mamba import BasicLayer, SS2DChanelFirst
 from .modules_common_ir import PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep
 
 
@@ -161,7 +161,7 @@ class DichotomyIRV5(nn.Module):
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, 2*num_out_ch, 3, 1, 1)
 
-        self.mamba = SS2D_g(d_model=num_out_ch)
+        self.mamba = SS2DChanelFirst(d_model=num_out_ch)
         conv_block = nn.Sequential(nn.Conv2d(embed_dim, num_feat), nn.LeakyReLU(inplace=True))
         self.self.conv_sigma_0, self.conv_bias_0 = conv_block, conv_block
         self.self.conv_sigma_1, self.conv_bias_1 = conv_block, conv_block

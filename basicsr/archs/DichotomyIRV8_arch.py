@@ -162,9 +162,9 @@ class DichotomyIRV8(nn.Module):
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, 2*num_out_ch, 3, 1, 1)
 
-        from .modules_v2dmamba import PostVSS2D
-        self.mamba_g = PostVSS2D(d_model=num_out_ch, channel_first=True)
-        self.mamba_b = PostVSS2D(d_model=num_out_ch, channel_first=True)
+        from .modules_v2dmamba import VSS2ChanelFirst
+        self.mamba_g = VSS2ChanelFirst(d_model=num_out_ch, channel_first=True)
+        self.mamba_b = VSS2ChanelFirst(d_model=num_out_ch, channel_first=True)
         # self.last_norm = nn.BatchNorm2d(num_features=24)
         self.apply(self._init_weights)
 
