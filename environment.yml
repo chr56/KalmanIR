@@ -5,19 +5,15 @@ channels:
   - defaults
 dependencies:
   - python=3.8.18
-  - setuptools=68.2.2
-  - packaging=23.2
+  - setuptools=68
+  - packaging=23
   - pip
-  - wheel
   - numpy=1.24.3
   - pytorch=2.0.1
   - pytorch-cuda=11.7
   - torchaudio=2.0.2
   - torchvision=0.15.2
   - torchtriton=2.0.0
-  - mkl
-  - tk
-  - typing_extensions
   - pip:
       - regex
       - pyyaml==6.0.1
