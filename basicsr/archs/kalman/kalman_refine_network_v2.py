@@ -4,6 +4,7 @@ from einops import rearrange
 
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
+from .utils import ChannelCompressor
 
 
 class KalmanRefineNetV2(nn.Module):
@@ -207,28 +208,3 @@ class UncertaintyEstimator(nn.Module):
 
         uncertainty = rearrange(uncertainty, "b (l c) h w -> (b l) c h w", l=sequence_length)
         return uncertainty
-
-
-class ChannelCompressor(nn.Module):
-    def __init__(self, in_channel: int, out_channel: int = 6, norm_num_groups=None):
-        super(ChannelCompressor, self).__init__()
-        num_groups = 1 if norm_num_groups is None else norm_num_groups
-        self.norm = nn.GroupNorm(num_groups, in_channel, eps=1e-6)
-        self.main_branch = nn.Sequential(
-            nn.Conv2d(in_channel, in_channel, kernel_size=1, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(num_groups, in_channel, eps=1e-6),
-            nn.Conv2d(in_channel, in_channel, kernel_size=1, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(num_groups, in_channel, eps=1e-6),
-            nn.Conv2d(in_channel, out_channel, kernel_size=1, padding='same'),
-        )
-        self.residual_branch = nn.Sequential(
-            nn.Conv2d(in_channel, out_channel, kernel_size=1, padding='same'),
-            nn.SiLU(inplace=True),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.norm(x)
-        x = self.main_branch(x) + self.residual_branch(x)
-        return x
