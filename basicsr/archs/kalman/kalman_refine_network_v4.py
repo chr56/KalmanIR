@@ -5,6 +5,8 @@ from einops import rearrange
 
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
+from .kalman_gain_calulators import KalmanGainCalculatorV0
+from .predictors import KalmanPredictorV0
 from .utils import calculate_difference, cal_ae, cal_bce, cal_cs
 
 
@@ -20,23 +22,11 @@ class KalmanRefineNetV4(nn.Module):
 
         self.difficult_zone_estimator = DifficultZoneEstimator(dim)
 
-        self.uncertainty_estimator = PerImageUncertaintyEstimator(dim)
-
-        kalman_gain_calculator = nn.Sequential(
-            ConvolutionalResBlock(dim, dim),
-            nn.Conv2d(dim, 1, kernel_size=1, padding=0),
-            nn.Sigmoid()
-        )
-
-        predictor = nn.Sequential(
-            ConvolutionalResBlock(dim, dim),
-            ConvolutionalResBlock(dim, dim),
-            nn.Sigmoid(),
-        )
+        self.uncertainty_estimator = UncertaintyEstimator(dim)
 
         self.kalman_filter = KalmanFilter(
-            kalman_gain_calculator=kalman_gain_calculator,
-            predictor=predictor,
+            kalman_gain_calculator=KalmanGainCalculatorV0(dim),
+            predictor=KalmanPredictorV0(dim),
         )
 
         self.apply(self._init_weights)
@@ -62,6 +52,9 @@ class KalmanRefineNetV4(nn.Module):
             raw_b: torch.Tensor,
             sigma: torch.Tensor,
     ) -> torch.Tensor:
+        image_sequence = torch.stack([raw_b, raw_a, refining], dim=1)
+        B, L, C, H, W = image_sequence.shape
+
         #####################################
         ##### Difficult Zone Estimation #####
         #####################################
@@ -72,48 +65,54 @@ class KalmanRefineNetV4(nn.Module):
         #### Uncertainty & KG Estimation ####
         #####################################
 
-        sequence = torch.stack((raw_b, raw_a, refining), dim=1).contiguous()
-        B, L, C, H, W = sequence.shape
+        uncertainty = self.uncertainty_estimator(
+            image_sequence,
+            difficult_zone,
+            sigma,
+        )  # [B, L, C, H, W]
 
-        uncertainty = []
-        for i in range(L):
-            img_uncertainty = self.uncertainty_estimator(
-                sequence[:, i, ...], difficult_zone, sigma
-            )
-            uncertainty.append(img_uncertainty)
-        uncertainty = torch.cat(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L * C, H, W]
-        uncertainty = rearrange(uncertainty, "b (l c) h w -> (b l) c h w", l=L)
-
+        uncertainty = rearrange(uncertainty, "b l c h w -> (b l) c h w")
         kalman_gain = self.kalman_filter.calc_gain(uncertainty, B)
 
         #####################################
         ########### Kalman Filter ###########
         #####################################
 
-        z_hat = None
-        previous_z = None
-        for i in range(L):
-            if i == 0:
-                z_hat = sequence[:, i, ...]  # initialize Z_hat with first z
-            else:
-                z_prime = self.kalman_filter.predict(previous_z.detach())
-                z_hat = self.kalman_filter.update(
-                    sequence[:, i, ...],
-                    z_prime,
-                    kalman_gain[:, i, ...]
-                )
-
-            previous_z = z_hat
-            pass
+        del uncertainty
+        refined_with_kf = self._perform_kalman_filter(kalman_gain, image_sequence)
 
         #####################################
         ############### Merge ###############
         #####################################
 
         difficult_zone = torch.sigmoid(difficult_zone)
-        refined = (1 - difficult_zone) * refining + difficult_zone * z_hat
+        refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
 
         return refined
+
+    def _perform_kalman_filter(self, kalman_gain: torch.Tensor, image_sequence: torch.Tensor):
+        """
+        :param kalman_gain: pre-calculated kalman gain, shape [B, L, C, H, W]
+        :param image_sequence: images in sequence, shape [B, L, C, H, W]
+        :return: refined result, shape [B, C, H, W]
+        """
+        z_hat = None
+        previous_z = None
+        image_sequence_length = image_sequence.shape[1]
+        for i in range(image_sequence_length):
+            if i == 0:
+                z_hat = image_sequence[:, i, ...]  # initialize Z_hat with first z
+            else:
+                z_prime = self.kalman_filter.predict(previous_z.detach())
+                z_hat = self.kalman_filter.update(
+                    image_sequence[:, i, ...],
+                    z_prime,
+                    kalman_gain[:, i, ...]
+                )
+
+            previous_z = z_hat
+            pass
+        return z_hat
 
 
 class DifficultZoneEstimator(nn.Module):
@@ -182,3 +181,31 @@ class PerImageUncertaintyEstimator(nn.Module):
         uncertainty = self.block(torch.cat((difficult_zone, sigma, img), dim=1))
         return uncertainty
 
+
+class UncertaintyEstimator(nn.Module):
+    def __init__(self, channel: int, ):
+        super(UncertaintyEstimator, self).__init__()
+        self.block = ConvolutionalResBlock(
+            3 * channel, channel,
+            norm_num_groups_1=1, norm_num_groups_2=1,
+        )
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        """
+        :param image_sequence: Image sequence, shape [B, L, C, H, W]
+        :param difficult_zone: Difficult Zone, shape [B, C, H, W]
+        :param sigma: variance, shape [B, C, H, W]
+        :return: estimated uncertainty, shape [B, L, C, H, W]
+        """
+
+        length = image_sequence.shape[1]
+
+        uncertainty = []
+        for i in range(length):
+            x = torch.cat((difficult_zone, sigma, image_sequence[:, i, ...]), dim=1)
+            x = self.block(x)
+            uncertainty.append(x)
+
+        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
+
+        return uncertainty
