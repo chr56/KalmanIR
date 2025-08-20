@@ -1,1 +1,22 @@
-CUDA_VISIBLE_DEVICES=0 python basicsr/test.py -opt options/test/test_DichonomyIR_SR_x4_V0.yml
+#!/usr/bin/env bash
+
+if [[ $# -ne 2 ]]; then
+  echo "Usage: $0 <config_path> <cuda_device_id>"
+  exit 1
+fi
+
+config_path="$1"
+config_name="${config_path##*/}"
+log_file="logs_${config_name}.log"
+
+cuda_device="$2"
+
+export CUDA_VISIBLE_DEVICES="$cuda_device"
+
+echo "Device: CUDA ${cuda_device}"
+echo "Config: ${config_path}"
+echo "Log:    ${log_file}"
+
+nohup python basicsr/test.py -opt "$config_path" > "$log_file" 2>&1 &
+
+echo "Starting..."
