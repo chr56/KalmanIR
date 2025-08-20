@@ -102,7 +102,7 @@ class BCEFocalLoss(nn.Module):
         from basicsr.utils.img_util import dump_images
         self.i = self.i + 1
         if self.i % 100 == 0:
-            dump_images(sr, hr, save_directory="/data1/hsw/visualization/focal_loss")
+            dump_images(sr, hr, save_directory="results/visualization/focal_loss")
 
 
 @LOSS_REGISTRY.register()

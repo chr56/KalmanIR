@@ -202,7 +202,7 @@ def analyze_erf(source, dest="heatmap.png", ALGRITHOM=lambda x: np.power(x - 1, 
 
 
 # copied from https://github.com/DingXiaoH/RepLKNet-pytorch
-def visualize_erf(MODEL: nn.Module = None, num_images=100, data_path="/data2/guohang/dataset/SR/Urban100/LR_bicubic",
+def visualize_erf(MODEL: nn.Module = None, num_images=100, data_path="datasets/benchmark/Urban100/LR_bicubic",
                   save_path=f"/tmp/{time.time()}/erf.npy"):
     def get_input_grad(model, samples):
         outputs = model(samples)
@@ -267,7 +267,7 @@ if __name__ == '__main__':
     showpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "show/erf")
     kwargs = dict(only_backbone=True, with_norm=False)
     init_model = buildMambaIR()
-    ckpt_path = '/data2/guohang/pretrained/classicSRx2.pth' # path to load your pre_trained model weights
+    ckpt_path = 'pretrained/classicSRx2.pth' # path to load your pre_trained model weights
     init_model.load_state_dict(torch.load(ckpt_path)['params'])
     save_path = f"./tmp/{time.time()}/erf.npy"
     grad_map = visualize_erf(init_model, save_path=save_path)
