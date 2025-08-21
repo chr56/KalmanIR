@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
+from basicsr.archs.arch_util import init_weights
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
 
@@ -38,20 +39,7 @@ class KalmanRefineNetV1(nn.Module):
             predictor=predictor,
         )
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        self.apply(init_weights)
 
     # noinspection PyPep8Naming
     def forward(

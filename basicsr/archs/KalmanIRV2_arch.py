@@ -6,10 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from basicsr.archs.arch_util import init_weights
 from basicsr.utils.registry import ARCH_REGISTRY
 from basicsr.utils import decimal_to_binary, binary_to_decimal
-
-from timm.models.layers import trunc_normal_
 
 from .IRNet import IRNet
 from .modules_mamba import SS2DChanelFirst
@@ -72,16 +71,7 @@ class KalmanIRV2(nn.Module):
 
         self.kalman_refine = KalmanRefineNetV2(dim=out_chans)
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+        self.apply(init_weights)
 
     def flops(self):
         flops = 0

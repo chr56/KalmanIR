@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
+from basicsr.archs.arch_util import init_weights
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
 
@@ -49,6 +50,8 @@ class KalmanRefineNetV0(nn.Module):
             kalman_gain_calculator=kalman_gain_calculator,
             predictor=predictor,
         )
+
+        self.apply(init_weights)
 
     # noinspection PyPep8Naming
     def forward(self, z: torch.Tensor) -> torch.Tensor:

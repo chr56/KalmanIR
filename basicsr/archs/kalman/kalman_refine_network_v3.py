@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from einops import rearrange
 
+from basicsr.archs.arch_util import init_weights
 from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
 from .utils import cal_kl, cal_bce, cal_cs
@@ -39,6 +40,7 @@ class KalmanRefineNetV3(nn.Module):
             predictor=predictor,
         )
 
+        self.apply(init_weights)
         self.apply(self._init_weights)
 
     def _init_weights(self, module):

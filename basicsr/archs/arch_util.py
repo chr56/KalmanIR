@@ -43,6 +43,31 @@ def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
                 if m.bias is not None:
                     m.bias.data.fill_(bias_fill)
 
+def init_all_weights(root_module: nn.Module):
+    for module in root_module.modules():
+        init_weights(module)
+
+@torch.no_grad()
+def init_weights(module: nn.Module):
+    if isinstance(module, nn.Conv2d):
+        init.kaiming_normal_(module.weight)
+        if module.bias is not None:
+            module.bias.data.zero_()
+    elif isinstance(module, (nn.Linear, nn.Embedding)):
+        module.weight.data.normal_(mean=0.0, std=0.02)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+    elif isinstance(module, nn.LayerNorm):
+        if module.weight is not None:
+            init.constant_(module.weight, 1)
+        if module.bias is not None:
+            module.bias.data.fill_(0)
+    elif isinstance(module, _BatchNorm):
+        if module.weight is not None:
+            init.constant_(module.weight, 1)
+        if module.bias is not None:
+            module.bias.data.fill_(0)
+
 
 def make_layer(basic_block, num_basic_block, **kwarg):
     """Make layers by stacking the same blocks.
@@ -197,7 +222,7 @@ def pixel_unshuffle(x, scale):
         Tensor: the pixel unshuffled feature.
     """
     b, c, hh, hw = x.size()
-    out_channel = c * (scale**2)
+    out_channel = c * (scale ** 2)
     assert hh % scale == 0 and hw % scale == 0
     h = hh // scale
     w = hw // scale
@@ -301,7 +326,6 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
 
 # From PyTorch
 def _ntuple(n):
-
     def parse(x):
         if isinstance(x, collections.abc.Iterable):
             return x
