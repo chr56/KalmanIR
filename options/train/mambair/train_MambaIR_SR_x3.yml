@@ -12,9 +12,9 @@ datasets:
     name: DF2K
     type: PairedImageDataset
     dataroot_gt:
-      - /data1/guohang/dataset/DF2K/DF2K/HR
+      - datasets/DF2K/train_HR
     dataroot_lq:
-      - /data1/guohang/dataset/DF2K/DF2K/LR_bicubic/X3
+      - datasets/DF2K/train_LR_bicubic/X3
     filename_tmpl: '{}x3'
     io_backend:
       type: disk
@@ -33,8 +33,8 @@ datasets:
   val:
     name: Set14
     type: PairedImageDataset
-    dataroot_gt: /data1/guohang/dataset/SR/Set14/HR
-    dataroot_lq: /data1/guohang/dataset/SR/Set14/LR_bicubic/X3
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
     filename_tmpl: '{}x3'
     io_backend:
       type: disk
@@ -56,7 +56,7 @@ network_g:
 
 path:
   # for classic SRx3, we use the x2 Model to initialize and halve the training iteration and lr for fast training
-  pretrain_network_g: /data1/guohang/pretrained/SR_MambaIR_x2.pth
+  pretrain_network_g: pretrained/SR_MambaIR_x2.pth
   strict_load_g: false
   resume_state: ~
 

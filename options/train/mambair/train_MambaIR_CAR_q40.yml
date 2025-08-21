@@ -10,8 +10,8 @@ datasets:
     task: CAR
     name: DFWB
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/DFWB/HQ
-    dataroot_lq: /home/gh/dataset/DFWB/LQ/40
+    dataroot_gt: datasets/DFWB/HQ
+    dataroot_lq: datasets/DFWB/LQ/40
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -31,8 +31,8 @@ datasets:
     task: CAR
     name: Classic5
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/CAR/classic5/Classic5_HQ
-    dataroot_lq: /home/gh/dataset/CAR/classic5/Classic5_LQ/40
+    dataroot_gt: datasets/CAR/classic5/Classic5_HQ
+    dataroot_lq: datasets/CAR/classic5/Classic5_LQ/40
     filename_tmpl: '{}'
     io_backend:
       type: disk

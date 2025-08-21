@@ -52,8 +52,8 @@ datasets:
   test_1:  # the 1st test dataset
     name: Set5
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -61,8 +61,8 @@ datasets:
   test_2:  # the 2nd test dataset
     name: Set14
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -70,8 +70,8 @@ datasets:
   test_3:  # the 3rd test dataset
     name: BSDS100
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -79,8 +79,8 @@ datasets:
   test_4:  # the 4th test dataset
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -88,8 +88,8 @@ datasets:
   test_5:  # the 5th test dataset
     name: Manga109
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk

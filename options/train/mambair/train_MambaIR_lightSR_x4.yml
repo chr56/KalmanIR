@@ -12,9 +12,9 @@ datasets:
     name: DF2K
     type: PairedImageDataset
     dataroot_gt:
-      - /data1/hsw/datasets/DIV2K/DIV2K_train_HR
+      - datasets/DF2K/train_HR
     dataroot_lq:
-      - /data1/hsw/datasets/DIV2K/X4
+      - datasets/DF2K/train_LR_bicubic/X4
     filename_tmpl: '{}x4'
     io_backend:
       type: disk
@@ -33,40 +33,40 @@ datasets:
   val:
     name: Set5
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_2:
     name: Set14
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_3:
     name: BSDS100
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_4:
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_5:
     name: Manga109
     type: PairedImageDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/LR
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk

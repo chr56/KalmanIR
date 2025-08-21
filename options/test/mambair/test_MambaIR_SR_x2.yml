@@ -9,45 +9,45 @@ datasets:
   test_1:  # the 1st test dataset
     name: Set5
     type: PairedImageDataset
-    dataroot_gt: /data2/guohang/dataset/SR/Set5/HR
-    dataroot_lq: /data2/guohang/dataset/SR/Set5/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_2/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_2/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
 
   test_2:  # the 2nd test dataset
     name: Set14
     type: PairedImageDataset
-    dataroot_gt: /data2/guohang/dataset/SR/Set14/HR
-    dataroot_lq: /data2/guohang/dataset/SR/Set14/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_2/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_2/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
-#
+
   test_3:  # the 3rd test dataset
-    name: B100
+    name: BSDS100
     type: PairedImageDataset
-    dataroot_gt: /data2/guohang/dataset/SR/B100/HR
-    dataroot_lq: /data2/guohang/dataset/SR/B100/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_2/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_2/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
 
   test_4:  # the 4th test dataset
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: /data2/guohang/dataset/SR/Urban100/HR
-    dataroot_lq: /data2/guohang/dataset/SR/Urban100/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_2/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_2/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
 
   test_5:  # the 5th test dataset
     name: Manga109
     type: PairedImageDataset
-    dataroot_gt: /data2/guohang/dataset/SR/Manga109/HR
-    dataroot_lq: /data2/guohang/dataset/SR/Manga109/LR_bicubic/X2
-    filename_tmpl: '{}_LRBI_x2'
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_2/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_2/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
 
@@ -69,7 +69,7 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: /data2/guohang/MambaIR-main/experiments/MambaIR_SR_x2/models/net_g_500000.pth
+  pretrain_network_g: experiments/MambaIR_SR_x2/models/net_g_500000.pth
   strict_load_g: true
 
 # validation settings

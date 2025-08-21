@@ -5,77 +5,6 @@ scale: 4
 num_gpu: 1
 manual_seed: 42
 
-# dataset and data loader settings
-datasets:
-  train:
-    task: SR
-    name: DF2K
-    type: PairedImageShuffleDataset
-    dataroot_gt:
-      - /data1/hsw/datasets/DF2K/train_HR
-#      - /data1/hsw/datasets/mini-imagenet/images1
-#      - /data1/hsw/datasets/DF2K/train_HR
-    dataroot_lq:
-      - /data1/hsw/datasets/DF2K/train_LR_bicubic/X4
-#      - /data1/hsw/datasets/mini-imagenet/images1_LRx4
-#      - /data1/hsw/datasets/DF2K/train_LR_bicubic/X4
-    filename_tmpl: '{}x4'
-    io_backend:
-      type: disk
-
-
-    gt_size: 128
-    use_hflip: true
-    use_rot: true
-
-    # data loader
-    use_shuffle: true
-    num_worker_per_gpu: 32
-    batch_size_per_gpu: 4
-    dataset_enlarge_ratio: 100
-    prefetch_mode: ~
-
-  val:
-    name: Set5
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set5/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
-  val_2:
-    name: Set14
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Set14/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
-  val_3:
-    name: BSDS100
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/BSDS100/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
-  val_4:
-    name: Urban100
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Urban100/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
-  val_5:
-    name: Manga109
-    type: PairedImageShuffleDataset
-    dataroot_gt: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/HR
-    dataroot_lq: /data1/hsw/datasets/benchmark/Manga109/image_SRF_4/LR
-    filename_tmpl: '{}'
-    io_backend:
-      type: disk
-
 # network structures
 network_g:
   type: KalmanIRV2
@@ -93,10 +22,9 @@ network_g:
 
 # path
 path:
-  # for classic SRx4, we use the x2 Model to initialize and halve the training iteration and lr for fast training
-  pretrain_network_g: ~ #/data1/hsw/pre_train/DichotomyIR/lr_3e_4/models/net_g_latest.pth
+  pretrain_network_g: ~
   strict_load_g: false
-  resume_state: ~ #/home/heshiwen/pyproject/MambaIR-main/experiments/x4_V1_2/training_states/60000.state
+  resume_state: ~
 
 
 # training settings
@@ -153,6 +81,72 @@ logger:
   wandb:
     project: ~
     resume_id: ~
+
+# dataset and data loader settings
+datasets:
+  train:
+    task: SR
+    name: DF2K
+    type: PairedImageShuffleDataset
+    dataroot_gt:
+      - datasets/DF2K/train_HR
+    dataroot_lq:
+      - datasets/DF2K/train_LR_bicubic/X4
+    filename_tmpl: '{}x4'
+    io_backend:
+      type: disk
+
+    gt_size: 128
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 32
+    batch_size_per_gpu: 4
+    dataset_enlarge_ratio: 100
+    prefetch_mode: ~
+
+  val_1:
+    name: Set5
+    type: PairedImageShuffleDataset
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_2:
+    name: Set14
+    type: PairedImageShuffleDataset
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_3:
+    name: Urban100
+    type: PairedImageShuffleDataset
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_4:
+    name: BSDS100
+    type: PairedImageShuffleDataset
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_5:
+    name: Manga109
+    type: PairedImageShuffleDataset
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
 
 # dist training settings
 dist_params:

@@ -9,8 +9,8 @@ datasets:
     task: CAR
     name: Classic5
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/CAR/classic5/Classic5_HQ
-    dataroot_lq: /home/gh/dataset/CAR/classic5/Classic5_LQ/10
+    dataroot_gt: datasets/CAR/classic5/Classic5_HQ
+    dataroot_lq: datasets/CAR/classic5/Classic5_LQ/10
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -19,8 +19,8 @@ datasets:
     task: CAR
     name: LIVE1
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/CAR/LIVE1/LIVE1_HQ
-    dataroot_lq: /home/gh/dataset/CAR/LIVE1/LIVE1_LQ/10
+    dataroot_gt: datasets/CAR/LIVE1/LIVE1_HQ
+    dataroot_lq: datasets/CAR/LIVE1/LIVE1_LQ/10
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -39,7 +39,7 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: /home/gh/project/MambaIR/experiments/MambaIR_CAR_q10/models/net_g_latest.pth
+  pretrain_network_g: experiments/MambaIR_CAR_q10/models/net_g_latest.pth
   strict_load_g: true
 
 # validation settings

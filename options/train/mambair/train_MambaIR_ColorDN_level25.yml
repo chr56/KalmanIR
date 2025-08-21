@@ -11,8 +11,8 @@ datasets:
     noise: 25 # 15/25/50
     name: DFWB_RGB
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/DFWB_RGB/HQ
-    dataroot_lq: /home/gh/dataset/DFWB_RGB/HQ
+    dataroot_gt: datasets/DFWB_RGB/HQ
+    dataroot_lq: datasets/DFWB_RGB/HQ
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -33,8 +33,8 @@ datasets:
     noise: 25 # 15/25/50
     name: CBSD68
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/ColorDN/CBSD68HQ
-    dataroot_lq: /home/gh/dataset/ColorDN/CBSD68HQ
+    dataroot_gt: datasets/ColorDN/CBSD68HQ
+    dataroot_lq: datasets/ColorDN/CBSD68HQ
     filename_tmpl: '{}'
     io_backend:
       type: disk

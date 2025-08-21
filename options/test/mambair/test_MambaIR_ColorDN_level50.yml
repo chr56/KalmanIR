@@ -9,8 +9,8 @@ datasets:
     task: denoising_color
     name: CBSD68
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/ColorDN/CBSD68HQ
-    dataroot_lq: /home/gh/dataset/ColorDN/CBSD68HQ
+    dataroot_gt: datasets/ColorDN/CBSD68HQ
+    dataroot_lq: datasets/ColorDN/CBSD68HQ
     filename_tmpl: '{}'
     noise: 50 # 15/25/50
     io_backend:
@@ -20,8 +20,8 @@ datasets:
     task: denoising_color
     name: Kodak24
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/ColorDN/Kodak24HQ
-    dataroot_lq: /home/gh/dataset/ColorDN/Kodak24HQ
+    dataroot_gt: datasets/ColorDN/Kodak24HQ
+    dataroot_lq: datasets/ColorDN/Kodak24HQ
     filename_tmpl: '{}'
     noise: 50 # 15/25/50
     io_backend:
@@ -31,8 +31,8 @@ datasets:
     task: denoising_color
     name: McMaster
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/ColorDN/McMasterHQ
-    dataroot_lq: /home/gh/dataset/ColorDN/McMasterHQ
+    dataroot_gt: datasets/ColorDN/McMasterHQ
+    dataroot_lq: datasets/ColorDN/McMasterHQ
     filename_tmpl: '{}'
     noise: 50 # 15/25/50
     io_backend:
@@ -42,8 +42,8 @@ datasets:
     task: denoising_color
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: /home/gh/dataset/ColorDN/Urban100HQ
-    dataroot_lq: /home/gh/dataset/ColorDN/Urban100HQ
+    dataroot_gt: datasets/ColorDN/Urban100HQ
+    dataroot_lq: datasets/ColorDN/Urban100HQ
     filename_tmpl: '{}'
     noise: 50 # 15/25/50
     io_backend:
