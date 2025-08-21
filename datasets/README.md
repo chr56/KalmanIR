@@ -4,17 +4,69 @@ For training and testing, we provide the directory structure. You can download t
 |-- datasets
     # image SR - train
     |-- DF2K
-        |-- HR
-        |-- LR_bicubic
+        |-- train_HR
+        |-- train_LR_bicubic
             |-- X2
             |-- X3
             |-- X4
     |-- DIV2K
-        |-- HR
-        |-- LR_bicubic
+        |-- train_HR
+        |-- train_LR_bicubic
             |-- X2
             |-- X3
             |-- X4
+    # image SR - test
+    |-- benchmark
+        |-- Set5
+            |-- image_SRF_2
+                |-- LR
+                |-- HR
+            |-- image_SRF_3
+                |-- LR
+                |-- HR
+            |-- image_SRF_4
+                |-- LR
+                |-- HR
+        |-- Set14
+            |-- image_SRF_2
+                |-- LR
+                |-- HR
+            |-- image_SRF_3
+                |-- LR
+                |-- HR
+            |-- image_SRF_4
+                |-- LR
+                |-- HR
+        |-- BSDS100
+            |-- image_SRF_2
+                |-- LR
+                |-- HR
+            |-- image_SRF_3
+                |-- LR
+                |-- HR
+            |-- image_SRF_4
+                |-- LR
+                |-- HR
+        |-- Urban100
+            |-- image_SRF_2
+                |-- LR
+                |-- HR
+            |-- image_SRF_3
+                |-- LR
+                |-- HR
+            |-- image_SRF_4
+                |-- LR
+                |-- HR
+        |-- Manga109
+            |-- image_SRF_2
+                |-- LR
+                |-- HR
+            |-- image_SRF_3
+                |-- LR
+                |-- HR
+            |-- image_SRF_4
+                |-- LR
+                |-- HR  
     # color image denoising - train
     |-- DFWB_RGB
         |-- HQ
@@ -33,38 +85,6 @@ For training and testing, we provide the directory structure. You can download t
             |-- 10
             |-- 30
             |-- 40  
-    # image SR - test
-    |-- benchmark
-        |-- Set5
-            |-- HR
-            |-- LR_bicubic
-                |-- X2
-                |-- X3
-                |-- X4
-        |-- Set14
-            |-- HR
-            |-- LR_bicubic
-                |-- X2
-                |-- X3
-                |-- X4
-        |-- B100
-            |-- HR
-            |-- LR_bicubic
-                |-- X2
-                |-- X3
-                |-- X4
-        |-- Urban100
-            |-- HR
-            |-- LR_bicubic
-                |-- X2
-                |-- X3
-                |-- X4
-        |-- Manga109
-            |-- HR
-            |-- LR_bicubic
-                |-- X2
-                |-- X3
-                |-- X4        
     # gaussian color image denoising - test
     |-- ColorDN
         |-- CBSD68HQ
