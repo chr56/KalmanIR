@@ -23,7 +23,11 @@ class KalmanIRV4(nn.Module):
         :param kwargs: (the remaining arguments for backbone network)
        """
 
-    def __init__(self, in_chans=3, **kwargs):
+    def __init__(self,
+                 in_chans=3,
+                 uncertainty_estimation_mode='',
+                 gain_calculation_mode='',
+                 **kwargs):
         super(KalmanIRV4, self).__init__()
         # define IR model
         out_chans = in_chans * 8
@@ -32,7 +36,12 @@ class KalmanIRV4(nn.Module):
         self.mamba_sigma = SS2DChanelFirst(d_model=out_chans)
         self.mamba_bias = SS2DChanelFirst(d_model=out_chans)
 
-        self.kalman_refine = KalmanRefineNetV4(dim=out_chans)
+        self.kalman_refine = KalmanRefineNetV4(
+            dim=out_chans,
+            img_seq=3,
+            uncertainty_estimation_mode=uncertainty_estimation_mode,
+            gain_calculation_mode=gain_calculation_mode,
+        )
 
         self.apply(init_weights)
 

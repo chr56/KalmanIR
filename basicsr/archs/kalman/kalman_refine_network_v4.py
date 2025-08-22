@@ -4,10 +4,20 @@ from torch.nn import functional as F
 from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
-from .convolutional_res_block import ConvolutionalResBlock
 from .kalman_filter import KalmanFilter
-from .kalman_gain_calulators import KalmanGainCalculatorV0
+from .kalman_gain_calulators import (
+    KalmanGainCalculatorV0,
+    KalmanGainCalculatorMambaSimple,
+    KalmanGainCalculatorMambaBlock,
+)
 from .predictors import KalmanPredictorV0
+from .uncertainty_estimators import (
+    UncertaintyEstimatorRecursiveConvolutional,
+    UncertaintyEstimatorRecursiveDecoderLayer,
+    UncertaintyEstimatorRecursiveCrossAttention,
+    UncertaintyEstimatorOneDecoderLayer,
+    UncertaintyEstimatorOneCrossAttention
+)
 from .utils import calculate_difference, cal_ae, cal_bce, cal_cs
 
 
@@ -18,15 +28,37 @@ class KalmanRefineNetV4(nn.Module):
     - No post-processing after updating
     """
 
-    def __init__(self, dim: int):
+    def __init__(
+            self,
+            dim: int,
+            img_seq: int = 3,
+            uncertainty_estimation_mode: str = '',
+            gain_calculation_mode: str = '',
+    ):
         super(KalmanRefineNetV4, self).__init__()
 
         self.difficult_zone_estimator = DifficultZoneEstimator(dim)
 
-        self.uncertainty_estimator = UncertaintyEstimator(dim)
+        if uncertainty_estimation_mode == "rca":
+            self.uncertainty_estimator = UncertaintyEstimatorRecursiveCrossAttention(dim, 3)
+        elif uncertainty_estimation_mode == "oca":
+            self.uncertainty_estimator = UncertaintyEstimatorOneCrossAttention(img_seq, dim, img_seq)
+        elif uncertainty_estimation_mode == "rdl":
+            self.uncertainty_estimator = UncertaintyEstimatorRecursiveDecoderLayer(dim, img_seq)
+        elif uncertainty_estimation_mode == "odl":
+            self.uncertainty_estimator = UncertaintyEstimatorOneDecoderLayer(img_seq, dim, img_seq)
+        else:
+            self.uncertainty_estimator = UncertaintyEstimatorRecursiveConvolutional(dim)
+
+        if gain_calculation_mode == "ss2d":
+            kalman_gain_calculator = KalmanGainCalculatorMambaSimple(dim)
+        elif gain_calculation_mode == "block":
+            kalman_gain_calculator = KalmanGainCalculatorMambaBlock(dim)
+        else:
+            kalman_gain_calculator = KalmanGainCalculatorV0(dim)
 
         self.kalman_filter = KalmanFilter(
-            kalman_gain_calculator=KalmanGainCalculatorV0(dim),
+            kalman_gain_calculator=kalman_gain_calculator,
             predictor=KalmanPredictorV0(dim),
         )
 
@@ -126,50 +158,3 @@ class DifficultZoneEstimator(nn.Module):
 
         return difficult_zone
 
-
-class PerImageUncertaintyEstimator(nn.Module):
-    def __init__(self, channel: int, ):
-        super(PerImageUncertaintyEstimator, self).__init__()
-        self.block = ConvolutionalResBlock(
-            3 * channel, channel,
-            norm_num_groups_1=1, norm_num_groups_2=1,
-        )
-
-    def forward(self, img: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        """
-        :param img: Image, shape [B, C, H, W]
-        :param difficult_zone: Difficult Zone mask, shape [B, C, H, W]
-        :param sigma: variance, shape [B, C, H, W]
-        :return: estimated uncertainty, shape [B, C, H, W]
-        """
-        uncertainty = self.block(torch.cat((difficult_zone, sigma, img), dim=1))
-        return uncertainty
-
-
-class UncertaintyEstimator(nn.Module):
-    def __init__(self, channel: int, ):
-        super(UncertaintyEstimator, self).__init__()
-        self.block = ConvolutionalResBlock(
-            3 * channel, channel,
-            norm_num_groups_1=1, norm_num_groups_2=1,
-        )
-
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        """
-        :param image_sequence: Image sequence, shape [B, L, C, H, W]
-        :param difficult_zone: Difficult Zone, shape [B, C, H, W]
-        :param sigma: variance, shape [B, C, H, W]
-        :return: estimated uncertainty, shape [B, L, C, H, W]
-        """
-
-        length = image_sequence.shape[1]
-
-        uncertainty = []
-        for i in range(length):
-            x = torch.cat((difficult_zone, sigma, image_sequence[:, i, ...]), dim=1)
-            x = self.block(x)
-            uncertainty.append(x)
-
-        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
-
-        return uncertainty
