@@ -4,100 +4,43 @@
 # @FileName: IRNet.py
 # @Email   : yanzhang1991@cqupt.edu.cn
 # Code Implementation of the MambaIR Model
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.models.layers import trunc_normal_
 
 NEG_INF = -1000000
 
+from basicsr.archs.arch_util import init_weights
 from .modules_mamba import BasicLayer
 from .modules_common_ir import PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep
 
 
-class ResidualGroup(nn.Module):
-    """Residual State Space Group (RSSG).
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-        img_size: Input image size.
-        patch_size: Patch size.
-        resi_connection: The convolutional block before residual connection.
-    """
-
-    def __init__(self,
-                 dim,
-                 input_resolution,
-                 depth,
-                 d_state=16,
-                 mlp_ratio=4.,
-                 drop_path=0.,
-                 norm_layer=nn.LayerNorm,
-                 downsample=None,
-                 use_checkpoint=False,
-                 img_size=None,
-                 patch_size=None,
-                 resi_connection='1conv',
-                 is_light_sr = False):
-        super(ResidualGroup, self).__init__()
-
-        self.dim = dim
-        self.input_resolution = input_resolution # [64, 64]
-
-        self.residual_group = BasicLayer(
-            dim=dim,
-            input_resolution=input_resolution,
-            depth=depth,
-            d_state = d_state,
-            mlp_ratio=mlp_ratio,
-            drop_path=drop_path,
-            norm_layer=norm_layer,
-            downsample=downsample,
-            use_checkpoint=use_checkpoint,
-            is_light_sr = is_light_sr)
-
-        # build the last conv layer in each residual state space group
-        if resi_connection == '1conv':
-            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
-        elif resi_connection == '3conv':
-            # to save parameters and memory
-            self.conv = nn.Sequential(
-                nn.Conv2d(dim, dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim, 3, 1, 1))
-
-        self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-        self.patch_unembed = PatchUnEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-    def forward(self, x, x_size):
-        return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size), x_size))) + x
-
-    def flops(self):
-        flops = 0
-        flops += self.residual_group.flops()
-        h, w = self.input_resolution
-        flops += h * w * self.dim * self.dim * 9
-        flops += self.patch_embed.flops()
-        flops += self.patch_unembed.flops()
-
-        return flops
-
-
 class IRNet(nn.Module):
+    """ Backbone network for IRNet.
+
+       Args:
+           img_size (int | tuple(int)): Input image size. Default 64
+           patch_size (int | tuple(int)): Patch size. Default: 1
+           in_chanel (int): Number of input image channels. Default: 3
+           embed_dim (int): Patch embedding dimension. Default: 96
+           d_state (int): num of hidden state in the state space model. Default: 16
+           depths (tuple(int)): Depth of each RSSG
+           drop_rate (float): Dropout rate. Default: 0
+           drop_path_rate (float): Stochastic depth rate. Default: 0.1
+           norm_layer (nn.Module): Normalization layer. Default: nn.LayerNorm.
+           patch_norm (bool): If True, add normalization after patch embedding. Default: True
+           use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
+           upscale: Upscale factor. 2/3/4 for image SR, 1 for denoising
+           img_range: Image range. 1. or 255.
+           upsampler: The reconstruction module. 'pixelshuffle'/'pixelshuffledirect'/None
+           resi_connection: The convolutional block before residual connection. '1conv'/'3conv'
+       """
+
     def __init__(self,
                  img_size=64,
                  patch_size=1,
-                 in_chans=3,
+                 in_chanel=3,
                  out_chanel=3,
                  embed_dim=96,
                  depths=(6, 6, 6, 6),
@@ -114,11 +57,11 @@ class IRNet(nn.Module):
                  resi_connection='1conv',
                  **kwargs):
         super(IRNet, self).__init__()
-        num_in_ch = in_chans
+        num_in_ch = in_chanel
         num_out_ch = out_chanel
         num_feat = 64
         self.img_range = img_range
-        if in_chans == 3:
+        if in_chanel == 3:
             rgb_mean = (0.4488, 0.4371, 0.4040)
             self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
         else:
@@ -210,23 +153,7 @@ class IRNet(nn.Module):
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, 2*num_out_ch, 3, 1, 1)
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
-    def cal_kl(self, pred, target):
-
-        P = torch.log_softmax(pred, dim=1)
-        Q = torch.softmax(target, dim=1)
-
-        return F.kl_div(P, Q, reduction='none')
+        self.apply(init_weights)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -284,3 +211,80 @@ class IRNet(nn.Module):
         flops += self.upsample.flops()
         return flops
 
+
+class ResidualGroup(nn.Module):
+    """Residual State Space Group (RSSG).
+
+    Args:
+        dim (int): Number of input channels.
+        input_resolution (tuple[int]): Input resolution.
+        depth (int): Number of blocks.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
+        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
+        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
+        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
+        img_size: Input image size.
+        patch_size: Patch size.
+        resi_connection: The convolutional block before residual connection.
+    """
+
+    def __init__(self,
+                 dim,
+                 input_resolution,
+                 depth,
+                 d_state=16,
+                 mlp_ratio=4.,
+                 drop_path=0.,
+                 norm_layer=nn.LayerNorm,
+                 downsample=None,
+                 use_checkpoint=False,
+                 img_size=None,
+                 patch_size=None,
+                 resi_connection='1conv',
+                 is_light_sr=False):
+        super(ResidualGroup, self).__init__()
+
+        self.dim = dim
+        self.input_resolution = input_resolution  # [64, 64]
+
+        self.residual_group = BasicLayer(
+            dim=dim,
+            input_resolution=input_resolution,
+            depth=depth,
+            d_state=d_state,
+            mlp_ratio=mlp_ratio,
+            drop_path=drop_path,
+            norm_layer=norm_layer,
+            downsample=downsample,
+            use_checkpoint=use_checkpoint,
+            is_light_sr=is_light_sr)
+
+        # build the last conv layer in each residual state space group
+        if resi_connection == '1conv':
+            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+        elif resi_connection == '3conv':
+            # to save parameters and memory
+            self.conv = nn.Sequential(
+                nn.Conv2d(dim, dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(dim // 4, dim, 3, 1, 1))
+
+        self.patch_embed = PatchEmbed(
+            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
+
+        self.patch_unembed = PatchUnEmbed(
+            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
+
+    def forward(self, x, x_size):
+        return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size), x_size))) + x
+
+    def flops(self):
+        flops = 0
+        flops += self.residual_group.flops()
+        h, w = self.input_resolution
+        flops += h * w * self.dim * self.dim * 9
+        flops += self.patch_embed.flops()
+        flops += self.patch_unembed.flops()
+
+        return flops

@@ -18,53 +18,16 @@ from .kalman.kalman_refine_network_v3 import KalmanRefineNetV3
 
 @ARCH_REGISTRY.register()
 class KalmanIRV3(nn.Module):
-    r""" MambaIR Model
-           A PyTorch impl of : `A Simple Baseline for Image Restoration with State Space Model `.
-
-       Args:
-           img_size (int | tuple(int)): Input image size. Default 64
-           patch_size (int | tuple(int)): Patch size. Default: 1
-           in_chans (int): Number of input image channels. Default: 3
-           embed_dim (int): Patch embedding dimension. Default: 96
-           d_state (int): num of hidden state in the state space model. Default: 16
-           depths (tuple(int)): Depth of each RSSG
-           drop_rate (float): Dropout rate. Default: 0
-           drop_path_rate (float): Stochastic depth rate. Default: 0.1
-           norm_layer (nn.Module): Normalization layer. Default: nn.LayerNorm.
-           patch_norm (bool): If True, add normalization after patch embedding. Default: True
-           use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
-           upscale: Upscale factor. 2/3/4 for image SR, 1 for denoising
-           img_range: Image range. 1. or 255.
-           upsampler: The reconstruction reconstruction module. 'pixelshuffle'/None
-           resi_connection: The convolutional block before residual connection. '1conv'/'3conv'
+    """ KalmanIR Model
+        :param in_chans(int): Number of input image channels. Default: 3
+        :param kwargs: (the remaining arguments for backbone network)
        """
 
-    def __init__(self,
-                 img_size=64,
-                 patch_size=1,
-                 in_chans=3,
-                 embed_dim=96,
-                 depths=(6, 6, 6, 6),
-                 drop_rate=0.,
-                 d_state=16,
-                 mlp_ratio=2.,
-                 drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm,
-                 patch_norm=True,
-                 use_checkpoint=False,
-                 upscale=2,
-                 img_range=1.,
-                 upsampler='',
-                 resi_connection='1conv',
-                 **kwargs):
+    def __init__(self, in_chans=3, **kwargs):
         super(KalmanIRV3, self).__init__()
         # define IR model
         out_chans = in_chans * 8
-        self.ir_net = IRNet(
-            img_size, patch_size, in_chans, out_chans, embed_dim, depths, drop_rate,
-            d_state, mlp_ratio, drop_path_rate, norm_layer, patch_norm, use_checkpoint,
-            upscale, img_range, upsampler, resi_connection, **kwargs
-        )
+        self.ir_net = IRNet(in_chanel=in_chans, out_chanel=out_chans, **kwargs)
 
         self.mamba_sigma = SS2DChanelFirst(d_model=out_chans)
         self.mamba_bias = SS2DChanelFirst(d_model=out_chans)
