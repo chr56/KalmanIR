@@ -66,3 +66,27 @@ class KalmanFilter(nn.Module):
         w_codes = rearrange(w_codes, "(b f) c h w -> b f c h w", b=batch_size)
 
         return w_codes
+
+    def perform_filtering(self, image_sequence: torch.Tensor, kalman_gain: torch.Tensor):
+        """
+        :param image_sequence: images in sequence, shape [Batch, Sequence, Channel, Height, Weight]
+        :param kalman_gain: pre-calculated kalman gain, shape [Batch, Sequence, Channel, Height, Weight]
+        :return: refined result, shape [B, C, H, W]
+        """
+        z_hat = None
+        previous_z = None
+        image_sequence_length = image_sequence.shape[1]
+        for i in range(image_sequence_length):
+            if i == 0:
+                z_hat = image_sequence[:, i, ...]  # initialize Z_hat with first z
+            else:
+                z_prime = self.predict(previous_z.detach())
+                z_hat = self.update(
+                    image_sequence[:, i, ...],
+                    z_prime,
+                    kalman_gain[:, i, ...]
+                )
+
+            previous_z = z_hat
+            pass
+        return z_hat

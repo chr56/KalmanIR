@@ -90,28 +90,15 @@ class KalmanRefineNetV3(nn.Module):
         ########### Kalman Filter ###########
         #####################################
 
-        z_hat = None
-        previous_z = None
-        for i in range(L):
-            if i == 0:
-                z_hat = sequence[:, i, ...]  # initialize Z_hat with first z
-            else:
-                z_prime = self.kalman_filter.predict(previous_z.detach())
-                z_hat = self.kalman_filter.update(
-                    sequence[:, i, ...],
-                    z_prime,
-                    kalman_gain[:, i, ...]
-                )
-
-            previous_z = z_hat
-            pass
+        del uncertainty
+        refined_with_kf = self.kalman_filter.perform_filtering(sequence, kalman_gain)
 
         #####################################
         ############### Merge ###############
         #####################################
 
         difficult_zone = torch.sigmoid(difficult_zone)
-        refined = (1 - difficult_zone) * refining + difficult_zone * z_hat
+        refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
 
         return refined
 

@@ -79,7 +79,7 @@ class KalmanRefineNetV4(nn.Module):
         #####################################
 
         del uncertainty
-        refined_with_kf = self._perform_kalman_filter(kalman_gain, image_sequence)
+        refined_with_kf = self.kalman_filter.perform_filtering(image_sequence, kalman_gain)
 
         #####################################
         ############### Merge ###############
@@ -89,30 +89,6 @@ class KalmanRefineNetV4(nn.Module):
         refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
 
         return refined
-
-    def _perform_kalman_filter(self, kalman_gain: torch.Tensor, image_sequence: torch.Tensor):
-        """
-        :param kalman_gain: pre-calculated kalman gain, shape [B, L, C, H, W]
-        :param image_sequence: images in sequence, shape [B, L, C, H, W]
-        :return: refined result, shape [B, C, H, W]
-        """
-        z_hat = None
-        previous_z = None
-        image_sequence_length = image_sequence.shape[1]
-        for i in range(image_sequence_length):
-            if i == 0:
-                z_hat = image_sequence[:, i, ...]  # initialize Z_hat with first z
-            else:
-                z_prime = self.kalman_filter.predict(previous_z.detach())
-                z_hat = self.kalman_filter.update(
-                    image_sequence[:, i, ...],
-                    z_prime,
-                    kalman_gain[:, i, ...]
-                )
-
-            previous_z = z_hat
-            pass
-        return z_hat
 
 
 class DifficultZoneEstimator(nn.Module):
