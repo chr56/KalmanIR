@@ -34,6 +34,7 @@ class KalmanRefineNetV4(nn.Module):
             img_seq: int = 3,
             uncertainty_estimation_mode: str = '',
             gain_calculation_mode: str = '',
+            with_difficult_zone_bias: bool = False,
     ):
         super(KalmanRefineNetV4, self).__init__()
 
@@ -61,6 +62,10 @@ class KalmanRefineNetV4(nn.Module):
             kalman_gain_calculator=kalman_gain_calculator,
             predictor=KalmanPredictorV0(dim),
         )
+
+        self.with_difficult_zone_bias = with_difficult_zone_bias
+        if self.with_difficult_zone_bias:
+            self.difficult_zone_bias = nn.Parameter(torch.zeros(dim))
 
         self.apply(init_weights)
 
@@ -104,6 +109,10 @@ class KalmanRefineNetV4(nn.Module):
         #####################################
         ############### Merge ###############
         #####################################
+
+        if self.with_difficult_zone_bias:
+            df_bias_repeated = self.difficult_zone_bias.view(-1, 1, 1).expand(-1, H, W)  # [C] -> [C, H, W]
+            difficult_zone = difficult_zone + df_bias_repeated
 
         difficult_zone = torch.sigmoid(difficult_zone)
         refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
@@ -157,4 +166,3 @@ class DifficultZoneEstimator(nn.Module):
                           ae_difference * self.residual_ratio)
 
         return difficult_zone
-
