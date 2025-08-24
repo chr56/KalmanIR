@@ -34,6 +34,96 @@ class UncertaintyEstimatorRecursiveConvolutional(nn.Module):
         return uncertainty
 
 
+class UncertaintyEstimatorRecursiveNarrowMambaBlock(nn.Module):
+    def __init__(self, length: int, channel: int, ):
+        super(UncertaintyEstimatorRecursiveNarrowMambaBlock, self).__init__()
+        self.length = length
+        from basicsr.archs.modules_mamba import SS2D
+        from .mamba_block import VSSBlockFabric, Mlp
+        self.vss_block = VSSBlockFabric(
+            dim=channel,
+            ssm_block=SS2D(d_model=channel),
+            mlp_block=Mlp(channel),
+            post_norm=False,
+        )
+        from .convolutional_res_block import ConvolutionalResBlock
+        self.channel_compressor = ConvolutionalResBlock(
+            length * channel, channel,
+            norm_num_groups_1=1, norm_num_groups_2=1,
+        )
+        from basicsr.archs.kalman.utils import layer_norm
+        self.layer_norm = layer_norm
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        """
+        :param image_sequence: Image sequence, shape [B, L, C, H, W]
+        :param difficult_zone: Difficult Zone, shape [B, C, H, W]
+        :param sigma: variance, shape [B, C, H, W]
+        :return: estimated uncertainty, shape [B, L, C, H, W]
+        """
+
+        length = image_sequence.shape[1]
+        assert length == self.length, ValueError(f"Expected length of {length} but got {length}")
+
+        uncertainty = []
+        for i in range(length):
+            x = torch.cat((difficult_zone, self.layer_norm(image_sequence[:, i, ...]), sigma), dim=1)
+            x = self.channel_compressor(x)
+            x = x.permute(0, 2, 3, 1).contiguous()  # [B, C, H, W] -> [B, H, W, C]
+            x = self.vss_block(x)
+            x = x.permute(0, 3, 1, 2).contiguous()  # [B, H, W, C] -> [B, C, H, W]
+            uncertainty.append(x)
+
+        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
+
+        return uncertainty
+
+
+class UncertaintyEstimatorRecursiveWideMambaBlock(nn.Module):
+    def __init__(self, length: int, channel: int, ):
+        super(UncertaintyEstimatorRecursiveWideMambaBlock, self).__init__()
+        self.length = length
+        from basicsr.archs.modules_mamba import SS2D
+        from .mamba_block import VSSBlockFabric, Mlp
+        self.vss_block = VSSBlockFabric(
+            dim=length * channel,
+            ssm_block=SS2D(d_model=length * channel),
+            mlp_block=Mlp(length * channel),
+            post_norm=False,
+        )
+        from .convolutional_res_block import ConvolutionalResBlock
+        self.channel_compressor = ConvolutionalResBlock(
+            length * channel, channel,
+            norm_num_groups_1=1, norm_num_groups_2=1,
+        )
+        from basicsr.archs.kalman.utils import layer_norm
+        self.layer_norm = layer_norm
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        """
+        :param image_sequence: Image sequence, shape [B, L, C, H, W]
+        :param difficult_zone: Difficult Zone, shape [B, C, H, W]
+        :param sigma: variance, shape [B, C, H, W]
+        :return: estimated uncertainty, shape [B, L, C, H, W]
+        """
+
+        length = image_sequence.shape[1]
+        assert length == self.length, ValueError(f"Expected length of {length} but got {length}")
+
+        uncertainty = []
+        for i in range(length):
+            x = torch.cat((difficult_zone, self.layer_norm(image_sequence[:, i, ...]), sigma), dim=1)
+            x = x.permute(0, 2, 3, 1).contiguous()  # [B, C', H, W] -> [B, H, W, C']
+            x = self.vss_block(x)
+            x = x.permute(0, 3, 1, 2).contiguous()  # [B, H, W, C'] -> [B, C', H, W]
+            x = self.channel_compressor(x)
+            uncertainty.append(x)
+
+        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
+
+        return uncertainty
+
+
 class UncertaintyEstimatorRecursiveDecoderLayer(nn.Module):
     def __init__(self, channel: int, head: int, patch_size: int = 16):
         super(UncertaintyEstimatorRecursiveDecoderLayer, self).__init__()
