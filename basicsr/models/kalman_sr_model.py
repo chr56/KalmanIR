@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from os import path as osp
+from typing import Dict, Any
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +17,7 @@ from basicsr.utils.img_util import (
     calculate_borders_for_chopping,
     recover_from_patches_and_remove_paddings
 )
+from basicsr.utils.module_util import lookup_optimizer
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 
@@ -166,6 +168,61 @@ class KalmanSRModel(BaseModel):
         logger.info(f"{len(criteria)} losses defined.")
         return criteria
 
+    def setup_optimizers(self):
+        train_opt = self.opt['train']
+        logger = get_root_logger()
+
+        partitioned_optimizer_opt = train_opt.get('partitioned_optimizer_g', None)
+        if partitioned_optimizer_opt is not None and hasattr(self.net_g, 'partitioned_parameters'):
+            # Optimizer with multiple parameters group
+
+            partitioned_parameters: Dict[str, Any] = self.net_g.partitioned_parameters()
+            remained_parameters_groups = list(partitioned_parameters.keys())
+
+            optim_type = partitioned_optimizer_opt['type']
+            default_settings = partitioned_optimizer_opt['default']
+            params = []
+            parameters_groups = partitioned_optimizer_opt.get('params', None)
+            if parameters_groups is not None:
+                for group_name, group_settings in parameters_groups.items():
+                    params_group = partitioned_parameters.get(group_name, None)
+                    assert params_group is not None, ValueError(
+                        f"Parameters group '{group_name}' not found"
+                        f" ( available group: {list(partitioned_parameters.keys())} )"
+                    )
+                    params.append(
+                        {'params': params_group, **group_settings}
+                    )
+                    remained_parameters_groups.remove(group_name)
+                pass
+            if len(remained_parameters_groups) > 0:
+                remaining_params_group = []
+                for key in remained_parameters_groups:
+                    remaining_params_group.extend(partitioned_parameters[key])
+                params.append(
+                    {'params': remaining_params_group, **default_settings}
+                )
+                pass
+
+            self.optimizer_g = lookup_optimizer(optim_type, params, **default_settings)
+            self.optimizers.append(self.optimizer_g)
+            logger.info(f"Created [{optim_type}] optimizer with {len(params)} parameters groups.")
+        else:
+            # Fallback to global optimizer
+            optim_opt = train_opt['optim_g']
+
+            params = []
+            for k, v in self.net_g.named_parameters():
+                if v.requires_grad:
+                    params.append(v)
+                else:
+                    logger.warning(f"Params {k} will not be optimized.")
+
+            optim_type = optim_opt.pop('type')
+            self.optimizer_g = self.get_optimizer(optim_type, params, **optim_opt)
+            self.optimizers.append(self.optimizer_g)
+            logger.info(f"Created global optimizer [{optim_type}].")
+
     def load_pretrained_discriminator(self, disc_opt):
         self.net_d = build_network(disc_opt)
         self.net_d = self.model_to_device(self.net_d)
@@ -180,20 +237,6 @@ class KalmanSRModel(BaseModel):
                 p.requires_grad = False
         else:
             raise ValueError("No pretrained discriminator network, GAN Loss not available!")
-
-    def setup_optimizers(self):
-        train_opt = self.opt['train']
-        optim_params = []
-        for k, v in self.net_g.named_parameters():
-            if v.requires_grad:
-                optim_params.append(v)
-            else:
-                logger = get_root_logger()
-                logger.warning(f'Params {k} will not be optimized.')
-
-        optim_type = train_opt['optim_g'].pop('type')
-        self.optimizer_g = self.get_optimizer(optim_type, optim_params, **train_opt['optim_g'])
-        self.optimizers.append(self.optimizer_g)
 
     def feed_data(self, data):
         self.lq = data['lq'].to(self.device)
@@ -252,7 +295,8 @@ class KalmanSRModel(BaseModel):
                     l_total += l_style
                     loss_dict[f'l_{name}' if not l_perceptual else f'l_{name}_style'] = l_style
             elif mode == 'gan':
-                with torch.no_grad(): d_out = F.sigmoid(self.net_d(sr))
+                with torch.no_grad():
+                    d_out = F.sigmoid(self.net_d(sr))
                 l_gan = loss_fn(d_out, True)
                 l_total += l_gan
                 loss_dict[f'l_{name}'] = l_gan
