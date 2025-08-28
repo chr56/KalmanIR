@@ -39,8 +39,10 @@ def binary_to_decimal(binary_tensors):
         c, h, w = binary_tensors.shape
         binary_tensors = binary_tensors.reshape(1, c, h, w)
 
+    square = torch.tensor(
+        [1., 2., 4., 8., 16., 32., 64., 128.], device=binary_tensors.device, dtype=binary_tensors.dtype
+    ).reshape(1, 8, 1, 1)
     binary_tensors = torch.split(binary_tensors, 8, 1)
-    square = torch.tensor([1., 2., 4., 8., 16., 32., 64., 128.]).reshape(1, 8, 1, 1).cuda()
     decimal_tensor = []
     for i in range(3):
         decimal_tensor.append(torch.sum(square * binary_tensors[i], dim=1))
