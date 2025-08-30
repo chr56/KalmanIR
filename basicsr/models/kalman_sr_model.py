@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from basicsr.archs import build_network
-from basicsr.losses import build_loss
 from basicsr.metrics import calculate_metric
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.binary_transform import decimal_to_binary, binary_to_decimal
@@ -20,6 +19,7 @@ from basicsr.utils.img_util import (
 from basicsr.utils.module_util import lookup_optimizer
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
+from .util_config import read_loss_options
 
 
 @MODEL_REGISTRY.register()
@@ -76,10 +76,10 @@ class KalmanSRModel(BaseModel):
     def init_training_settings(self):
         self.net_g.train()
         train_opt = self.opt['train']
+        logger = get_root_logger()
 
         self.ema_decay = train_opt.get('ema_decay', 0)
         if self.ema_decay > 0:
-            logger = get_root_logger()
             logger.info(f'Use Exponential Moving Average with decay: {self.ema_decay}')
             # define network net_g with Exponential Moving Average (EMA)
             # net_g_ema is used only for testing on one GPU and saving
@@ -94,79 +94,17 @@ class KalmanSRModel(BaseModel):
             self.net_g_ema.eval()
 
         # define losses
-        self.require_discriminator = False
-        self.criteria = self.setup_losses(train_opt)
-        if self.require_discriminator:
-            logger = get_root_logger()
+        criteria, require_discriminator = read_loss_options(
+            train_opt, self.device, len(self.model_output_format), logger
+        )
+        self.criteria = criteria
+        if require_discriminator:
             logger.info('Loading pretrained discriminator...')
             self.load_pretrained_discriminator(self.opt['network_d'])
 
         # set up optimizers and schedulers
         self.setup_optimizers()
         self.setup_schedulers()
-
-    def setup_losses(self, train_opt) -> dict:
-        criteria = dict()
-        logger = get_root_logger()
-
-        def _extract(name, opt_, key, default):
-            if key not in opt_:
-                get_root_logger().warning(f"`{key}` is not defined in loss `{name}`, use default value `{default}`")
-            value = opt_.get(key, default)
-            return value
-
-        _supported_loss_mode = ['pixel', 'perceptual', 'gan']
-
-        if train_opt.get('losses'):
-            # multiple losses
-            for name, loss_opt in train_opt['losses'].items():
-                if 'loss' not in loss_opt:
-                    logger.error(f"Loss type `{name}` is not defined in loss `{name}`, skipping.")
-                    continue
-                loss_fn = build_loss(loss_opt['loss']).to(self.device)
-
-                loss_target = int(_extract(name, loss_opt, 'target', 0))
-                loss_format = _extract(name, loss_opt, 'format', 'D')
-                loss_mode = str(_extract(name, loss_opt, 'mode', 'pixel'))
-                if loss_mode not in _supported_loss_mode:
-                    logger.error(f"unsupported loss mode `{loss_mode}` in loss `{name}`")
-                    loss_mode = _supported_loss_mode[0]
-                if loss_target < 0 or loss_target >= len(self.model_output_format):
-                    logger.error(f"outraged loss target index `{loss_target}` in loss `{name}`")
-                    loss_target = 0
-
-                if loss_mode == 'gan':
-                    self.require_discriminator = True
-
-                criteria[name] = {
-                    'loss': loss_fn,
-                    'target': loss_target,
-                    'format': loss_format,
-                    'mode': loss_mode,
-                }
-        else:
-            # simple mixed losses
-            if train_opt.get('pixel_opt'):
-                loss_fn = build_loss(train_opt['pixel_opt']).to(self.device)
-                criteria['pixel'] = {
-                    'loss': loss_fn,
-                    'target': None,
-                    'format': 'D',
-                    'mode': 'pixel',
-                }
-            if train_opt.get('perceptual_opt'):
-                loss_fn = build_loss(train_opt['perceptual_opt']).to(self.device)
-                criteria['perceptual'] = {
-                    'loss': loss_fn,
-                    'target': None,
-                    'format': 'D',
-                    'mode': 'perceptual',
-                }
-
-        if len(criteria) == 0:
-            raise ValueError('No losses defined.')
-        logger.info(f"{len(criteria)} losses defined.")
-        return criteria
 
     def setup_optimizers(self):
         train_opt = self.opt['train']
