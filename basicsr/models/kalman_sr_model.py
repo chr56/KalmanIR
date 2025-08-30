@@ -50,7 +50,10 @@ class KalmanSRModel(BaseModel):
             param_key = self.opt['path'].get('param_key_g', 'params')
             self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
 
+        # training settings
         if self.is_train:
+            self.criteria = None
+            self.optimizer_g = None
             self.init_training_settings()
 
     def init_training_settings(self):
@@ -58,20 +61,7 @@ class KalmanSRModel(BaseModel):
         train_opt = self.opt['train']
         logger = get_root_logger()
 
-        self.ema_decay = train_opt.get('ema_decay', 0)
-        if self.ema_decay > 0:
-            logger.info(f'Use Exponential Moving Average with decay: {self.ema_decay}')
-            # define network net_g with Exponential Moving Average (EMA)
-            # net_g_ema is used only for testing on one GPU and saving
-            # There is no need to wrap with DistributedDataParallel
-            self.net_g_ema = build_network(self.opt['network_g']).to(self.device)
-            # load pretrained model
-            load_path = self.opt['path'].get('pretrain_network_g', None)
-            if load_path is not None:
-                self.load_network(self.net_g_ema, load_path, self.opt['path'].get('strict_load_g', True), 'params_ema')
-            else:
-                self.model_ema(0)  # copy net_g weight
-            self.net_g_ema.eval()
+        self.setup_ema_decay(train_opt, logger)
 
         # define losses
         criteria, require_discriminator = read_loss_options(
@@ -103,6 +93,22 @@ class KalmanSRModel(BaseModel):
                 p.requires_grad = False
         else:
             raise ValueError("No pretrained discriminator network, GAN Loss not available!")
+
+    def setup_ema_decay(self, train_opt, logger):
+        self.ema_decay = train_opt.get('ema_decay', 0)
+        if self.ema_decay > 0:
+            logger.info(f'Use Exponential Moving Average with decay: {self.ema_decay}')
+            # define network net_g with Exponential Moving Average (EMA)
+            # net_g_ema is used only for testing on one GPU and saving
+            # There is no need to wrap with DistributedDataParallel
+            self.net_g_ema = build_network(self.opt['network_g']).to(self.device)
+            # load pretrained model
+            load_path = self.opt['path'].get('pretrain_network_g', None)
+            if load_path is not None:
+                self.load_network(self.net_g_ema, load_path, self.opt['path'].get('strict_load_g', True), 'params_ema')
+            else:
+                self.model_ema(0)  # copy net_g weight
+            self.net_g_ema.eval()
 
     def feed_data(self, data):
         self.lq = data['lq'].to(self.device)
