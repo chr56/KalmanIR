@@ -3,6 +3,7 @@ from typing import Dict, Any, Tuple
 
 from basicsr.losses import build_loss
 from basicsr.utils.logger import get_root_logger
+from basicsr.utils.module_util import lookup_optimizer
 
 
 def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[dict, bool]:
@@ -86,6 +87,80 @@ def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[di
         raise ValueError('No losses defined.')
     logger.info(f"{len(criteria)} losses defined.")
     return criteria, require_discriminator
+
+
+def read_optimizer_options(train_opt, net_g, logger):
+    """
+    Example of `train_opt`
+    ```
+      partitioned_optimizer_g:
+        type: Adam
+        default:
+          lr: !!float 3e-4
+          weight_decay: 0
+          betas: [ 0.9, 0.99 ]
+        params:
+          <GroupName1>:
+            lr: !!float 5e-4
+            weight_decay: !!float 1e-5
+            betas: [ 0.9, 0.99 ]
+          <GroupName2>:
+            lr: !!float 6e-4
+            weight_decay: !!float 1e-5
+            betas: [ 0.9, 0.99 ]
+    ```
+    """
+
+    partitioned_optimizer_opt = train_opt.get('partitioned_optimizer_g', None)
+    if partitioned_optimizer_opt is not None and hasattr(net_g, 'partitioned_parameters'):
+        # Optimizer with multiple parameters group
+
+        partitioned_parameters: Dict[str, Any] = net_g.partitioned_parameters()
+        remained_parameters_groups = list(partitioned_parameters.keys())
+
+        optim_type = partitioned_optimizer_opt['type']
+        default_settings = partitioned_optimizer_opt['default']
+        params = []
+        parameters_groups = partitioned_optimizer_opt.get('params', None)
+        if parameters_groups is not None:
+            for group_name, group_settings in parameters_groups.items():
+                params_group = partitioned_parameters.get(group_name, None)
+                assert params_group is not None, ValueError(
+                    f"Parameters group '{group_name}' not found"
+                    f" ( available group: {list(partitioned_parameters.keys())} )"
+                )
+                params.append(
+                    {'params': params_group, **group_settings}
+                )
+                remained_parameters_groups.remove(group_name)
+            pass
+        if len(remained_parameters_groups) > 0:
+            remaining_params_group = []
+            for key in remained_parameters_groups:
+                remaining_params_group.extend(partitioned_parameters[key])
+            params.append(
+                {'params': remaining_params_group, **default_settings}
+            )
+            pass
+
+        optimizer_g = lookup_optimizer(optim_type, params, **default_settings)
+        logger.info(f"Created [{optim_type}] optimizer with {len(params)} parameters groups.")
+    else:
+        # Fallback to global optimizer
+        optim_opt = train_opt['optim_g']
+
+        params = []
+        for k, v in net_g.named_parameters():
+            if v.requires_grad:
+                params.append(v)
+            else:
+                logger.warning(f"Params {k} will not be optimized.")
+
+        optim_type = optim_opt.pop('type')
+        optimizer_g = lookup_optimizer(optim_type, params, **optim_opt)
+        logger.info(f"Created global optimizer [{optim_type}].")
+
+    return optimizer_g
 
 
 def _extract(name, opt_, key, default):

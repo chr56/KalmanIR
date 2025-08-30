@@ -16,10 +16,9 @@ from basicsr.utils.img_util import (
     calculate_borders_for_chopping,
     recover_from_patches_and_remove_paddings
 )
-from basicsr.utils.module_util import lookup_optimizer
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
-from .util_config import read_loss_options
+from .util_config import read_loss_options, read_optimizer_options
 
 
 @MODEL_REGISTRY.register()
@@ -102,64 +101,12 @@ class KalmanSRModel(BaseModel):
             logger.info('Loading pretrained discriminator...')
             self.load_pretrained_discriminator(self.opt['network_d'])
 
-        # set up optimizers and schedulers
-        self.setup_optimizers()
+        # set up optimizers
+        self.optimizer_g = read_optimizer_options(train_opt, self.net_g, logger)
+        self.optimizers.append(self.optimizer_g)
+
+        # set up schedulers
         self.setup_schedulers()
-
-    def setup_optimizers(self):
-        train_opt = self.opt['train']
-        logger = get_root_logger()
-
-        partitioned_optimizer_opt = train_opt.get('partitioned_optimizer_g', None)
-        if partitioned_optimizer_opt is not None and hasattr(self.net_g, 'partitioned_parameters'):
-            # Optimizer with multiple parameters group
-
-            partitioned_parameters: Dict[str, Any] = self.net_g.partitioned_parameters()
-            remained_parameters_groups = list(partitioned_parameters.keys())
-
-            optim_type = partitioned_optimizer_opt['type']
-            default_settings = partitioned_optimizer_opt['default']
-            params = []
-            parameters_groups = partitioned_optimizer_opt.get('params', None)
-            if parameters_groups is not None:
-                for group_name, group_settings in parameters_groups.items():
-                    params_group = partitioned_parameters.get(group_name, None)
-                    assert params_group is not None, ValueError(
-                        f"Parameters group '{group_name}' not found"
-                        f" ( available group: {list(partitioned_parameters.keys())} )"
-                    )
-                    params.append(
-                        {'params': params_group, **group_settings}
-                    )
-                    remained_parameters_groups.remove(group_name)
-                pass
-            if len(remained_parameters_groups) > 0:
-                remaining_params_group = []
-                for key in remained_parameters_groups:
-                    remaining_params_group.extend(partitioned_parameters[key])
-                params.append(
-                    {'params': remaining_params_group, **default_settings}
-                )
-                pass
-
-            self.optimizer_g = lookup_optimizer(optim_type, params, **default_settings)
-            self.optimizers.append(self.optimizer_g)
-            logger.info(f"Created [{optim_type}] optimizer with {len(params)} parameters groups.")
-        else:
-            # Fallback to global optimizer
-            optim_opt = train_opt['optim_g']
-
-            params = []
-            for k, v in self.net_g.named_parameters():
-                if v.requires_grad:
-                    params.append(v)
-                else:
-                    logger.warning(f"Params {k} will not be optimized.")
-
-            optim_type = optim_opt.pop('type')
-            self.optimizer_g = self.get_optimizer(optim_type, params, **optim_opt)
-            self.optimizers.append(self.optimizer_g)
-            logger.info(f"Created global optimizer [{optim_type}].")
 
     def load_pretrained_discriminator(self, disc_opt):
         self.net_d = build_network(disc_opt)
