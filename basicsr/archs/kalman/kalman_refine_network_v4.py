@@ -15,6 +15,7 @@ from .uncertainty_estimators import (
     UncertaintyEstimatorRecursiveConvolutional,
     UncertaintyEstimatorRecursiveDecoderLayer,
     UncertaintyEstimatorRecursiveCrossAttention,
+    UncertaintyEstimatorConvolutionalCrossAttention,
     UncertaintyEstimatorOneDecoderLayer,
     UncertaintyEstimatorOneCrossAttention
 )
@@ -44,6 +45,8 @@ class KalmanRefineNetV4(nn.Module):
             self.uncertainty_estimator = UncertaintyEstimatorRecursiveCrossAttention(dim, 3)
         elif uncertainty_estimation_mode == "oca":
             self.uncertainty_estimator = UncertaintyEstimatorOneCrossAttention(img_seq, dim, img_seq)
+        elif uncertainty_estimation_mode == "cca":
+            self.uncertainty_estimator = UncertaintyEstimatorConvolutionalCrossAttention(dim, 3)
         elif uncertainty_estimation_mode == "rdl":
             self.uncertainty_estimator = UncertaintyEstimatorRecursiveDecoderLayer(dim, img_seq)
         elif uncertainty_estimation_mode == "odl":
