@@ -27,7 +27,7 @@ class KalmanIRV5(nn.Module):
                  in_chans=3,
                  uncertainty_estimation_mode='',
                  gain_calculation_mode='',
-                 with_difficult_zone_bias=False,
+                 with_difficult_zone_affine=False,
                  **kwargs):
         super(KalmanIRV5, self).__init__()
 
@@ -42,7 +42,7 @@ class KalmanIRV5(nn.Module):
             img_seq=3,
             uncertainty_estimation_mode=uncertainty_estimation_mode,
             gain_calculation_mode=gain_calculation_mode,
-            with_difficult_zone_bias=with_difficult_zone_bias,
+            with_difficult_zone_affine=with_difficult_zone_affine,
         )
 
         self.apply(init_weights)
