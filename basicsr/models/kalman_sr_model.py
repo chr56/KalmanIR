@@ -18,7 +18,7 @@ from basicsr.utils.img_util import (
 )
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
-from .util_config import read_loss_options, read_optimizer_options
+from .util_config import read_loss_options, read_optimizer_options, valid_model_output_settings
 
 
 @MODEL_REGISTRY.register()
@@ -40,7 +40,9 @@ class KalmanSRModel(BaseModel):
         # parse network output settings
         self.model_output_format = opt['model_output']
         self.enabled_output_indexes = opt.get('model_output_enabled', None)
-        self.valid_model_output_settings()
+        self.primary_output_index = valid_model_output_settings(
+            self.model_output_format, self.enabled_output_indexes
+        )
 
         # load pretrained models
         load_path = self.opt['path'].get('pretrain_network_g', None)
@@ -50,27 +52,6 @@ class KalmanSRModel(BaseModel):
 
         if self.is_train:
             self.init_training_settings()
-
-    def valid_model_output_settings(self):
-        # outputs
-        supported_formats = ['B', 'D']
-        if isinstance(self.model_output_format, list):
-            for f in self.model_output_format:
-                if f not in supported_formats:
-                    raise NotImplementedError(f"Unsupported format: {self.model_output_format}")
-        else:
-            raise ValueError("`model_output` should be a list")
-        # enabled outputs
-        if self.enabled_output_indexes is None:
-            self.enabled_output_indexes = [0]  # enable first output by default
-        elif isinstance(self.enabled_output_indexes, list):
-            for idx in self.enabled_output_indexes:
-                assert isinstance(idx, int) and 0 <= idx < len(self.model_output_format), ValueError(
-                    f"illegal index `{idx}` in `model_output_enabled`: {self.model_output_format}"
-                )
-        else:
-            raise ValueError("`model_output_enabled` should be a list")
-        self.primary_output_index = self.enabled_output_indexes[0]  # first enabled output as primary output
 
     def init_training_settings(self):
         self.net_g.train()

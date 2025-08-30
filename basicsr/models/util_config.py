@@ -6,6 +6,29 @@ from basicsr.utils.logger import get_root_logger
 from basicsr.utils.module_util import lookup_optimizer
 
 
+def valid_model_output_settings(model_output_format, enabled_output_indexes):
+    # outputs
+    _supported_formats = ['B', 'D']
+    if isinstance(model_output_format, list):
+        for f in model_output_format:
+            if f not in _supported_formats:
+                raise NotImplementedError(f"Unsupported format: {model_output_format}")
+    else:
+        raise ValueError("`model_output` should be a list")
+    # enabled outputs
+    if enabled_output_indexes is None:
+        enabled_output_indexes = [0]  # enable first output by default
+    elif isinstance(enabled_output_indexes, list):
+        for idx in enabled_output_indexes:
+            assert isinstance(idx, int) and 0 <= idx < len(model_output_format), ValueError(
+                f"illegal index `{idx}` in `model_output_enabled`: {model_output_format}"
+            )
+    else:
+        raise ValueError("`model_output_enabled` should be a list")
+    primary_output_index = enabled_output_indexes[0]  # first enabled output as primary output
+    return primary_output_index
+
+
 def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[dict, bool]:
     r"""
     Example of `train_opt`
