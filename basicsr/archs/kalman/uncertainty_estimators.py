@@ -351,6 +351,53 @@ class UncertaintyEstimatorOneCrossAttention(nn.Module):
         return u
 
 
+class UncertaintyEstimatorMambaErrorEstimation(nn.Module):
+    def __init__(self, length: int, channel: int, **kwargs):
+        super(UncertaintyEstimatorMambaErrorEstimation, self).__init__()
+        self.channel = channel
+        self.iteration = length
+
+        from basicsr.archs.kalman.utils import cal_kl
+        self.cal_kl = cal_kl
+
+        from basicsr.archs.modules_mamba import SS2DChanelFirst
+        self.mamba_sigma = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias = SS2DChanelFirst(d_model=channel, **kwargs)
+
+        self.merger = nn.Sequential(
+            nn.GroupNorm(2, 2 * channel, eps=1e-6),
+            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
+            nn.LeakyReLU(),
+            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
+            nn.Sigmoid(),
+        )
+        self.merger_residual_rate = nn.Parameter(torch.ones(1))
+
+    def _forward_one_step(self, current_state, previous_state, image):
+        sigma = self.mamba_sigma(self.cal_kl(current_state, previous_state))
+        bias = self.mamba_bias(image)
+        next_state = (current_state / torch.exp(-sigma)) + bias
+        return next_state, current_state
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        uncertainty = []
+        current = difficult_zone / torch.exp(-sigma) # Initial value
+        previous = difficult_zone  # Initial value
+        for i in range(self.iteration):
+            image = image_sequence[:, i, ...]
+            previous, current = self._forward_one_step(
+                current_state=current,
+                previous_state=previous,
+                image=image,
+            )
+            u = self.merger(torch.cat((current, image), dim=1)) # [B, 2C, H, W] -> [B, C, H, W]
+            u = self.merger_residual_rate * current + u
+            uncertainty.append(u)
+
+        uncertainty = torch.stack(uncertainty, dim=1) # L * [B, C, H, W] -> [B, L, C, H, W]
+        return uncertainty
+
+
 def _pad_and_patch(x: torch.Tensor, patch_size: int):
     """
     :param x: shape [B, D, H, W]
