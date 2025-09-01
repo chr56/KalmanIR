@@ -4,6 +4,27 @@ from torch.nn import functional as F
 from einops import rearrange, repeat
 
 
+def build_uncertainty_estimator(mode, dim, seq_length) -> nn.Module:
+    if mode == "rca":
+        return UncertaintyEstimatorRecursiveCrossAttention(dim, 3)
+    elif mode == "rnmb":
+        return UncertaintyEstimatorRecursiveNarrowMambaBlock(seq_length, dim)
+    elif mode == "rwmb":
+        return UncertaintyEstimatorRecursiveWideMambaBlock(seq_length, dim)
+    elif mode == "oca":
+        return UncertaintyEstimatorOneCrossAttention(seq_length, dim, seq_length)
+    elif mode == "cca":
+        return UncertaintyEstimatorConvolutionalCrossAttention(dim, 3)
+    elif mode == "rdl":
+        return UncertaintyEstimatorRecursiveDecoderLayer(dim, seq_length)
+    elif mode == "odl":
+        return UncertaintyEstimatorOneDecoderLayer(seq_length, dim, seq_length)
+    elif mode == "mee":
+        return UncertaintyEstimatorMambaErrorEstimation(seq_length, dim)
+    else:
+        return UncertaintyEstimatorRecursiveConvolutional(dim)
+
+
 class UncertaintyEstimatorRecursiveConvolutional(nn.Module):
     def __init__(self, channel: int, ):
         super(UncertaintyEstimatorRecursiveConvolutional, self).__init__()
@@ -38,8 +59,7 @@ class UncertaintyEstimatorRecursiveNarrowMambaBlock(nn.Module):
     def __init__(self, length: int, channel: int, ):
         super(UncertaintyEstimatorRecursiveNarrowMambaBlock, self).__init__()
         self.length = length
-        from basicsr.archs.modules_mamba import SS2D
-        from .mamba_block import VSSBlockFabric, Mlp
+        from basicsr.archs.modules_mamba import SS2D, Mlp, VSSBlockFabric
         self.vss_block = VSSBlockFabric(
             dim=channel,
             ssm_block=SS2D(d_model=channel),
@@ -83,8 +103,7 @@ class UncertaintyEstimatorRecursiveWideMambaBlock(nn.Module):
     def __init__(self, length: int, channel: int, ):
         super(UncertaintyEstimatorRecursiveWideMambaBlock, self).__init__()
         self.length = length
-        from basicsr.archs.modules_mamba import SS2D
-        from .mamba_block import VSSBlockFabric, Mlp
+        from basicsr.archs.modules_mamba import SS2D, Mlp, VSSBlockFabric
         self.vss_block = VSSBlockFabric(
             dim=length * channel,
             ssm_block=SS2D(d_model=length * channel),

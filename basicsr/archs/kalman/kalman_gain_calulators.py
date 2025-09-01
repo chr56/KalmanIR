@@ -2,6 +2,15 @@ import torch
 from torch import nn
 
 
+def build_gain_calculator(mode, dim) -> nn.Module:
+    if mode == "ss2d":
+        return KalmanGainCalculatorMambaSimple(dim)
+    elif mode == "block":
+        return KalmanGainCalculatorMambaBlock(dim)
+    else:
+        return KalmanGainCalculatorV0(dim)
+
+
 class KalmanGainCalculatorV0(nn.Module):
     def __init__(self, dim: int):
         super(KalmanGainCalculatorV0, self).__init__()
@@ -32,8 +41,7 @@ class KalmanGainCalculatorMambaSimple(nn.Module):
 class KalmanGainCalculatorMambaBlock(nn.Module):
     def __init__(self, dim: int):
         super(KalmanGainCalculatorMambaBlock, self).__init__()
-        from basicsr.archs.modules_mamba import SS2D
-        from .mamba_block import VSSBlockFabric, Mlp
+        from basicsr.archs.modules_mamba import SS2D, Mlp, VSSBlockFabric
         self.mamba = VSSBlockFabric(
             dim=dim,
             ssm_block=SS2D(d_model=dim),

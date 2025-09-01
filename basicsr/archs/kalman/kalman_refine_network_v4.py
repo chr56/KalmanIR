@@ -5,21 +5,9 @@ from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
 from .kalman_filter import KalmanFilter
-from .kalman_gain_calulators import (
-    KalmanGainCalculatorV0,
-    KalmanGainCalculatorMambaSimple,
-    KalmanGainCalculatorMambaBlock,
-)
+from .kalman_gain_calulators import build_gain_calculator
 from .predictors import KalmanPredictorV0
-from .uncertainty_estimators import (
-    UncertaintyEstimatorRecursiveConvolutional,
-    UncertaintyEstimatorRecursiveDecoderLayer,
-    UncertaintyEstimatorRecursiveCrossAttention,
-    UncertaintyEstimatorConvolutionalCrossAttention,
-    UncertaintyEstimatorMambaErrorEstimation,
-    UncertaintyEstimatorOneDecoderLayer,
-    UncertaintyEstimatorOneCrossAttention
-)
+from .uncertainty_estimators import build_uncertainty_estimator
 from .utils import calculate_difference, cal_ae, cal_bce, cal_cs
 
 
@@ -42,27 +30,11 @@ class KalmanRefineNetV4(nn.Module):
 
         self.difficult_zone_estimator = DifficultZoneEstimator(dim)
 
-        if uncertainty_estimation_mode == "rca":
-            self.uncertainty_estimator = UncertaintyEstimatorRecursiveCrossAttention(dim, 3)
-        elif uncertainty_estimation_mode == "oca":
-            self.uncertainty_estimator = UncertaintyEstimatorOneCrossAttention(img_seq, dim, img_seq)
-        elif uncertainty_estimation_mode == "cca":
-            self.uncertainty_estimator = UncertaintyEstimatorConvolutionalCrossAttention(dim, 3)
-        elif uncertainty_estimation_mode == "rdl":
-            self.uncertainty_estimator = UncertaintyEstimatorRecursiveDecoderLayer(dim, img_seq)
-        elif uncertainty_estimation_mode == "odl":
-            self.uncertainty_estimator = UncertaintyEstimatorOneDecoderLayer(img_seq, dim, img_seq)
-        elif uncertainty_estimation_mode == "mee":
-            self.uncertainty_estimator = UncertaintyEstimatorMambaErrorEstimation(img_seq, dim)
-        else:
-            self.uncertainty_estimator = UncertaintyEstimatorRecursiveConvolutional(dim)
+        self.uncertainty_estimator = build_uncertainty_estimator(
+            mode=uncertainty_estimation_mode, seq_length=img_seq, dim=dim
+        )
 
-        if gain_calculation_mode == "ss2d":
-            kalman_gain_calculator = KalmanGainCalculatorMambaSimple(dim)
-        elif gain_calculation_mode == "block":
-            kalman_gain_calculator = KalmanGainCalculatorMambaBlock(dim)
-        else:
-            kalman_gain_calculator = KalmanGainCalculatorV0(dim)
+        kalman_gain_calculator = build_gain_calculator(mode=gain_calculation_mode, dim=dim)
 
         self.kalman_filter = KalmanFilter(
             kalman_gain_calculator=kalman_gain_calculator,
