@@ -405,20 +405,20 @@ class UncertaintyEstimatorIterativeMambaErrorEstimation(nn.Module):
 
     def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
         uncertainty = []
-        current = difficult_zone / torch.exp(-sigma) # Initial value
+        current = difficult_zone / torch.exp(-sigma)  # Initial value
         previous = difficult_zone  # Initial value
         for i in range(self.iteration):
             image = image_sequence[:, i, ...]
-            previous, current = self._forward_one_step(
+            current, previous = self._forward_one_step(
                 current_state=current,
                 previous_state=previous,
                 image=image,
             )
-            u = self.merger(torch.cat((current, image), dim=1)) # [B, 2C, H, W] -> [B, C, H, W]
-            u = self.merger_residual_rate * current + u
+            u = self.merger(torch.cat((current, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
+            u = self.merger_residual_rate * current + (1 - self.merger_residual_rate) * u
             uncertainty.append(u)
 
-        uncertainty = torch.stack(uncertainty, dim=1) # L * [B, C, H, W] -> [B, L, C, H, W]
+        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
         return uncertainty
 
 
