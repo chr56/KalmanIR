@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: KalmanIR_V5_exp_uncertainty_cca
+name: KalmanIR_V4_exp_gain_mamba_block
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
 model_output_enabled: [0, 1] # enabled output images
@@ -9,7 +9,7 @@ manual_seed: 42
 
 # network structures
 network_g:
-  type: KalmanIRV5
+  type: KalmanIRV4
   upscale: 4
   in_chans: 3
   img_size: 32
@@ -21,8 +21,8 @@ network_g:
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
-  uncertainty_estimation_mode: 'cca'
-  gain_calculation_mode: ''
+  uncertainty_estimation_mode: ''
+  gain_calculation_mode: 'block'
 
 network_d: # Discriminator used in GAN loss
   type: VGGStyleDiscriminator
@@ -95,22 +95,15 @@ train:
         loss_weight: 0.05
         gan_type: 'vanilla'
 
-
-  partitioned_optimizer_g:
+  optim_g:
     type: Adam
-    default:
-      lr: !!float 3e-4
-      weight_decay: 0
-      betas: [ 0.9, 0.99 ]
-    params:
-      uncertainty_estimator:
-        lr: !!float 6e-4
-        weight_decay: !!float 2e-5
-        betas: [ 0.9, 0.99 ]
+    lr: !!float 3e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
 
   scheduler:
     type: MultiStepLR
-    milestones: [ 156250, 200000, 225000, 237500 ]
+    milestones: [ 125000, 200000, 225000, 237500 ]
     gamma: 0.5
 
   total_iter: 250000
@@ -118,7 +111,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 10e3
+  val_freq: !!float 5e3
   save_img: false
 
   metrics:

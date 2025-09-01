@@ -5,29 +5,34 @@ from einops import rearrange, repeat
 
 
 def build_uncertainty_estimator(mode, dim, seq_length) -> nn.Module:
-    if mode == "rca":
-        return UncertaintyEstimatorRecursiveCrossAttention(dim, 3)
-    elif mode == "rnmb":
-        return UncertaintyEstimatorRecursiveNarrowMambaBlock(seq_length, dim)
-    elif mode == "rwmb":
-        return UncertaintyEstimatorRecursiveWideMambaBlock(seq_length, dim)
-    elif mode == "oca":
-        return UncertaintyEstimatorOneCrossAttention(seq_length, dim, seq_length)
-    elif mode == "cca":
-        return UncertaintyEstimatorConvolutionalCrossAttention(dim, 3)
-    elif mode == "rdl":
-        return UncertaintyEstimatorRecursiveDecoderLayer(dim, seq_length)
-    elif mode == "odl":
+    if mode == "iterative_convolutional":
+        return UncertaintyEstimatorIterativeConvolutional(dim)
+    elif mode == "iterative_narrow_mamba_block":
+        return UncertaintyEstimatorIterativeNarrowMambaBlock(seq_length, dim)
+    elif mode == "iterative_wide_mamba_block":
+        return UncertaintyEstimatorIterativeWideMambaBlock(seq_length, dim)
+    elif mode == "one_decoder_layer":
         return UncertaintyEstimatorOneDecoderLayer(seq_length, dim, seq_length)
-    elif mode == "mee":
-        return UncertaintyEstimatorMambaErrorEstimation(seq_length, dim)
+    elif mode == "iterative_decoder_layer":
+        return UncertaintyEstimatorIterativeDecoderLayer(dim, seq_length)
+    elif mode == "one_cross_attention":
+        return UncertaintyEstimatorOneCrossAttention(seq_length, dim, seq_length)
+    elif mode == "iterative_cross_attention":
+        return UncertaintyEstimatorIterativeCrossAttention(dim, 3)
+    elif mode == "iterative_convolutional_cross_attention":
+        return UncertaintyEstimatorIterativeConvolutionalCrossAttention(dim, 3)
+    elif mode == "iterative_mamba_error_estimation":
+        return UncertaintyEstimatorIterativeMambaErrorEstimation(seq_length, dim)
     else:
-        return UncertaintyEstimatorRecursiveConvolutional(dim)
+        if mode:
+            import warnings
+            warnings.warn(f"Unknown uncertainty estimator mode `{mode}`, using default!")
+        return UncertaintyEstimatorIterativeConvolutional(dim)
 
 
-class UncertaintyEstimatorRecursiveConvolutional(nn.Module):
+class UncertaintyEstimatorIterativeConvolutional(nn.Module):
     def __init__(self, channel: int, ):
-        super(UncertaintyEstimatorRecursiveConvolutional, self).__init__()
+        super(UncertaintyEstimatorIterativeConvolutional, self).__init__()
         from .convolutional_res_block import ConvolutionalResBlock
         self.block = ConvolutionalResBlock(
             3 * channel, channel,
@@ -55,9 +60,9 @@ class UncertaintyEstimatorRecursiveConvolutional(nn.Module):
         return uncertainty
 
 
-class UncertaintyEstimatorRecursiveNarrowMambaBlock(nn.Module):
+class UncertaintyEstimatorIterativeNarrowMambaBlock(nn.Module):
     def __init__(self, length: int, channel: int, ):
-        super(UncertaintyEstimatorRecursiveNarrowMambaBlock, self).__init__()
+        super(UncertaintyEstimatorIterativeNarrowMambaBlock, self).__init__()
         self.length = length
         from basicsr.archs.modules_mamba import SS2D, Mlp, VSSBlockFabric
         self.vss_block = VSSBlockFabric(
@@ -99,9 +104,9 @@ class UncertaintyEstimatorRecursiveNarrowMambaBlock(nn.Module):
         return uncertainty
 
 
-class UncertaintyEstimatorRecursiveWideMambaBlock(nn.Module):
+class UncertaintyEstimatorIterativeWideMambaBlock(nn.Module):
     def __init__(self, length: int, channel: int, ):
-        super(UncertaintyEstimatorRecursiveWideMambaBlock, self).__init__()
+        super(UncertaintyEstimatorIterativeWideMambaBlock, self).__init__()
         self.length = length
         from basicsr.archs.modules_mamba import SS2D, Mlp, VSSBlockFabric
         self.vss_block = VSSBlockFabric(
@@ -143,9 +148,9 @@ class UncertaintyEstimatorRecursiveWideMambaBlock(nn.Module):
         return uncertainty
 
 
-class UncertaintyEstimatorRecursiveDecoderLayer(nn.Module):
+class UncertaintyEstimatorIterativeDecoderLayer(nn.Module):
     def __init__(self, channel: int, head: int, patch_size: int = 16):
-        super(UncertaintyEstimatorRecursiveDecoderLayer, self).__init__()
+        super(UncertaintyEstimatorIterativeDecoderLayer, self).__init__()
         self.patch_size = patch_size
 
         self.decoder_sigma_merge = nn.TransformerDecoderLayer(
@@ -227,9 +232,9 @@ class UncertaintyEstimatorOneDecoderLayer(nn.Module):
         return u
 
 
-class UncertaintyEstimatorConvolutionalCrossAttention(nn.Module):
+class UncertaintyEstimatorIterativeConvolutionalCrossAttention(nn.Module):
     def __init__(self, channel: int, head: int, patch_size: int = 16):
-        super(UncertaintyEstimatorConvolutionalCrossAttention, self).__init__()
+        super(UncertaintyEstimatorIterativeConvolutionalCrossAttention, self).__init__()
         self.patch_size = patch_size
 
         self.attention_sigma_merge = nn.MultiheadAttention(
@@ -281,9 +286,9 @@ class UncertaintyEstimatorConvolutionalCrossAttention(nn.Module):
         return uncertainty
 
 
-class UncertaintyEstimatorRecursiveCrossAttention(nn.Module):
+class UncertaintyEstimatorIterativeCrossAttention(nn.Module):
     def __init__(self, channel: int, head: int, patch_size: int = 16):
-        super(UncertaintyEstimatorRecursiveCrossAttention, self).__init__()
+        super(UncertaintyEstimatorIterativeCrossAttention, self).__init__()
         self.patch_size = patch_size
 
         self.attention_sigma_merge = nn.MultiheadAttention(
@@ -370,9 +375,9 @@ class UncertaintyEstimatorOneCrossAttention(nn.Module):
         return u
 
 
-class UncertaintyEstimatorMambaErrorEstimation(nn.Module):
+class UncertaintyEstimatorIterativeMambaErrorEstimation(nn.Module):
     def __init__(self, length: int, channel: int, **kwargs):
-        super(UncertaintyEstimatorMambaErrorEstimation, self).__init__()
+        super(UncertaintyEstimatorIterativeMambaErrorEstimation, self).__init__()
         self.channel = channel
         self.iteration = length
 

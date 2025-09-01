@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: KalmanIR_V5_exp_uncertainty_mee_rev1
+name: KalmanIR_V5_exp_gain_mamba_block_slr
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
 model_output_enabled: [0, 1] # enabled output images
@@ -21,8 +21,8 @@ network_g:
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
-  uncertainty_estimation_mode: 'mee'
-  gain_calculation_mode: ''
+  uncertainty_estimation_mode: ''
+  gain_calculation_mode: 'block'
 
 network_d: # Discriminator used in GAN loss
   type: VGGStyleDiscriminator
@@ -103,7 +103,7 @@ train:
       weight_decay: 0
       betas: [ 0.9, 0.99 ]
     params:
-      uncertainty_estimator:
+      kalman_filter:
         lr: !!float 6e-4
         weight_decay: !!float 2e-5
         betas: [ 0.9, 0.99 ]

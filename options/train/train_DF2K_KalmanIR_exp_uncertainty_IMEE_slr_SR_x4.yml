@@ -1,15 +1,15 @@
 # general settings for image SR training
-name: KalmanIR_V4_affine_L1_FourierL1_PerceptualL1_GAN
+name: KalmanIR_V5_exp_uncertainty_iterative_mamba_error_estimation_rev1_slr
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
-model_output_enabled: [0, 1, 2, 3] # enabled output images
+model_output_enabled: [0, 1] # enabled output images
 scale: 4
 num_gpu: 1
 manual_seed: 42
 
 # network structures
 network_g:
-  type: KalmanIRV4
+  type: KalmanIRV5
   upscale: 4
   in_chans: 3
   img_size: 32
@@ -21,9 +21,8 @@ network_g:
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
-  uncertainty_estimation_mode: ''
+  uncertainty_estimation_mode: 'iterative_mamba_error_estimation'
   gain_calculation_mode: ''
-  with_difficult_zone_affine: true
 
 network_d: # Discriminator used in GAN loss
   type: VGGStyleDiscriminator
@@ -97,15 +96,21 @@ train:
         gan_type: 'vanilla'
 
 
-  optim_g:
+  partitioned_optimizer_g:
     type: Adam
-    lr: !!float 3e-4
-    weight_decay: 0
-    betas: [0.9, 0.99]
+    default:
+      lr: !!float 3e-4
+      weight_decay: 0
+      betas: [ 0.9, 0.99 ]
+    params:
+      uncertainty_estimator:
+        lr: !!float 6e-4
+        weight_decay: !!float 2e-5
+        betas: [ 0.9, 0.99 ]
 
   scheduler:
     type: MultiStepLR
-    milestones: [ 125000, 200000, 225000, 237500 ]
+    milestones: [ 156250, 200000, 225000, 237500 ]
     gamma: 0.5
 
   total_iter: 250000
@@ -130,7 +135,7 @@ val:
 # logging settings
 logger:
   print_freq: 250
-  save_checkpoint_freq: !!float 10e3
+  save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
     project: ~
@@ -157,7 +162,7 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 32
+    num_worker_per_gpu: 16
     batch_size_per_gpu: 4
     dataset_enlarge_ratio: 100
     prefetch_mode: ~

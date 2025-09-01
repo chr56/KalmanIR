@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: KalmanIR_V4_exp_uncertainty_odl_L1_FourierL1_PerceptualL1_GAN
+name: KalmanIR_V4_exp_gain_mamba_simple
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
 model_output_enabled: [0, 1] # enabled output images
@@ -21,8 +21,8 @@ network_g:
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
-  uncertainty_estimation_mode: 'odl'
-  gain_calculation_mode: ''
+  uncertainty_estimation_mode: ''
+  gain_calculation_mode: 'ss2d'
 
 network_d: # Discriminator used in GAN loss
   type: VGGStyleDiscriminator
