@@ -165,9 +165,9 @@ def parse_options(root_path, is_train=True):
         # change some options for debug mode
         if 'debug' in opt['name']:
             if 'val' in opt:
-                opt['val']['val_freq'] = 8
-            opt['logger']['print_freq'] = 1
-            opt['logger']['save_checkpoint_freq'] = 8
+                opt['val']['val_freq'] = 20
+            opt['logger']['print_freq'] = 4
+            opt['logger']['save_checkpoint_freq'] = 40
     else:  # test
         results_root = osp.join(root_path, 'results', opt['name'])
         opt['path']['results_root'] = results_root
