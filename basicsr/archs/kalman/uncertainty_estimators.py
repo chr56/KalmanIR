@@ -76,8 +76,8 @@ class UncertaintyEstimatorIterativeNarrowMambaBlock(nn.Module):
             length * channel, channel,
             norm_num_groups_1=1, norm_num_groups_2=1,
         )
-        from basicsr.archs.kalman.utils import layer_norm
-        self.layer_norm = layer_norm
+        from .utils import LayerNorm2d
+        self.norm = LayerNorm2d(channel)
 
     def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
         """
@@ -92,11 +92,11 @@ class UncertaintyEstimatorIterativeNarrowMambaBlock(nn.Module):
 
         uncertainty = []
         for i in range(length):
-            x = torch.cat((difficult_zone, self.layer_norm(image_sequence[:, i, ...]), sigma), dim=1)
+            x = torch.cat((difficult_zone, self.norm(image_sequence[:, i, ...]), sigma), dim=1)
             x = self.channel_compressor(x)
-            x = x.permute(0, 2, 3, 1).contiguous()  # [B, C, H, W] -> [B, H, W, C]
+            x = x.permute(0, 2, 3, 1)  # [B, C, H, W] -> [B, H, W, C]
             x = self.vss_block(x)
-            x = x.permute(0, 3, 1, 2).contiguous()  # [B, H, W, C] -> [B, C, H, W]
+            x = x.permute(0, 3, 1, 2)  # [B, H, W, C] -> [B, C, H, W]
             uncertainty.append(x)
 
         uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
@@ -120,8 +120,8 @@ class UncertaintyEstimatorIterativeWideMambaBlock(nn.Module):
             length * channel, channel,
             norm_num_groups_1=1, norm_num_groups_2=1,
         )
-        from basicsr.archs.kalman.utils import layer_norm
-        self.layer_norm = layer_norm
+        from .utils import LayerNorm2d
+        self.norm = LayerNorm2d(channel)
 
     def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
         """
@@ -136,10 +136,10 @@ class UncertaintyEstimatorIterativeWideMambaBlock(nn.Module):
 
         uncertainty = []
         for i in range(length):
-            x = torch.cat((difficult_zone, self.layer_norm(image_sequence[:, i, ...]), sigma), dim=1)
-            x = x.permute(0, 2, 3, 1).contiguous()  # [B, C', H, W] -> [B, H, W, C']
+            x = torch.cat((difficult_zone, self.norm(image_sequence[:, i, ...]), sigma), dim=1)
+            x = x.permute(0, 2, 3, 1) # [B, C', H, W] -> [B, H, W, C']
             x = self.vss_block(x)
-            x = x.permute(0, 3, 1, 2).contiguous()  # [B, H, W, C'] -> [B, C', H, W]
+            x = x.permute(0, 3, 1, 2)  # [B, H, W, C'] -> [B, C', H, W]
             x = self.channel_compressor(x)
             uncertainty.append(x)
 
