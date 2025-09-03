@@ -23,6 +23,8 @@ def build_uncertainty_estimator(mode, dim, seq_length) -> nn.Module:
         return UncertaintyEstimatorIterativeConvolutionalCrossAttention(dim, 3)
     elif mode == "iterative_mamba_error_estimation":
         return UncertaintyEstimatorIterativeMambaErrorEstimation(seq_length, dim)
+    elif mode == "iterative_mamba_error_estimation_v2":
+        return UncertaintyEstimatorIterativeMambaErrorEstimationV2(seq_length, dim)
     else:
         if mode:
             import warnings
@@ -417,6 +419,58 @@ class UncertaintyEstimatorIterativeMambaErrorEstimation(nn.Module):
             u = self.merger(torch.cat((current, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
             u = self.merger_residual_rate * current + (1 - self.merger_residual_rate) * u
             uncertainty.append(u)
+
+        uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
+        return uncertainty
+
+
+class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
+    def __init__(self, length: int, channel: int, **kwargs):
+        super(UncertaintyEstimatorIterativeMambaErrorEstimationV2, self).__init__()
+        self.channel = channel
+        self.iteration = length
+
+        from basicsr.archs.kalman.utils import cal_kl
+        self.cal_kl = cal_kl
+
+        from basicsr.archs.modules_mamba import SS2DChanelFirst
+        self.mamba_sigma = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias = SS2DChanelFirst(d_model=channel, **kwargs)
+
+        self.mamba_residual = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.linear_merger = nn.Sequential(
+            nn.GroupNorm(2, 2 * channel, eps=1e-6),
+            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
+            nn.LeakyReLU(),
+            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
+            nn.LeakyReLU(),
+        )
+
+    def _forward_one_step_error_estimate(self, current_state, previous_state, image):
+        sigma = self.mamba_sigma(self.cal_kl(current_state, previous_state))
+        bias = self.mamba_bias(image)
+        next_state = (current_state / torch.exp(-sigma)) + bias
+        return next_state, current_state
+
+    def _forward_uncertainty_estimate(self, state, image):
+        update_rate = torch.sigmoid_(self.mamba_residual(image))
+        estimated = self.linear_merger(torch.cat((state, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
+        estimated = update_rate * estimated + (1 - update_rate) * state
+        return estimated
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        uncertainty = []
+        current = difficult_zone / torch.exp(-sigma)  # Initial value
+        previous = difficult_zone  # Initial value
+        for i in range(self.iteration):
+            image = image_sequence[:, i, ...]
+            current, previous = self._forward_one_step_error_estimate(
+                current_state=current,
+                previous_state=previous,
+                image=image,
+            )
+            estimated = self._forward_uncertainty_estimate(current, image)
+            uncertainty.append(estimated)
 
         uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
         return uncertainty
