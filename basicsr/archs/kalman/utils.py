@@ -47,6 +47,15 @@ def layer_norm(tensor: torch.Tensor) -> torch.Tensor:
     return F.layer_norm(tensor, tensor.shape[1:])
 
 
+class LayerNorm2d(nn.LayerNorm):
+    """ shape [B, C, H, W] """
+    def forward(self, x: torch.Tensor):
+        x = x.permute(0, 2, 3, 1)
+        x = nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        x = x.permute(0, 3, 1, 2)
+        return x
+
+
 class ChannelCompressor(nn.Module):
     def __init__(self, in_channel: int, out_channel: int = 6, norm_num_groups=None):
         super(ChannelCompressor, self).__init__()
