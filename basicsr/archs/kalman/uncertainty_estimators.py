@@ -430,21 +430,26 @@ class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from basicsr.archs.kalman.utils import cal_kl
+        from .utils import cal_kl
         self.cal_kl = cal_kl
 
         from basicsr.archs.modules_mamba import SS2DChanelFirst
         self.mamba_sigma = SS2DChanelFirst(d_model=channel, **kwargs)
         self.mamba_bias = SS2DChanelFirst(d_model=channel, **kwargs)
 
-        self.mamba_residual = SS2DChanelFirst(d_model=channel, **kwargs)
-        self.linear_merger = nn.Sequential(
-            nn.GroupNorm(2, 2 * channel, eps=1e-6),
-            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-            nn.LeakyReLU(),
+        from .utils import LayerNorm2d
+        self.feat_dim = 36
+        self.shallow_feature_extractor = nn.Sequential(
+            nn.Conv2d(channel, self.feat_dim, kernel_size=1, padding='same'),
+            nn.SiLU(inplace=True),
+            LayerNorm2d(self.feat_dim),
+            nn.Conv2d(self.feat_dim, self.feat_dim, kernel_size=3, padding='same'),
+            nn.SiLU(inplace=True),
+            LayerNorm2d(self.feat_dim),
+            nn.Conv2d(self.feat_dim, channel, kernel_size=1, padding='same'),
+            nn.Sigmoid(),
         )
+        self.mamba_adjust = SS2DChanelFirst(d_model=channel, **kwargs)
 
     def _forward_one_step_error_estimate(self, current_state, previous_state, image):
         sigma = self.mamba_sigma(self.cal_kl(current_state, previous_state))
@@ -453,10 +458,9 @@ class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
         return next_state, current_state
 
     def _forward_uncertainty_estimate(self, state, image):
-        update_rate = torch.sigmoid_(self.mamba_residual(image))
-        estimated = self.linear_merger(torch.cat((state, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
-        estimated = update_rate * estimated + (1 - update_rate) * state
-        return estimated
+        features = self.shallow_feature_extractor(image)
+        weights = torch.sigmoid_(self.mamba_adjust(features)) * 2
+        return weights * state
 
     def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
         uncertainty = []
