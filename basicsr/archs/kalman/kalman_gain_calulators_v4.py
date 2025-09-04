@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 
-def build_gain_calculator(mode, dim) -> nn.Module:
+def build_gain_calculator_for_v4(mode, dim) -> nn.Module:
     if mode == "ss2d":
         return KalmanGainCalculatorMambaSimple(dim)
     elif mode == "block":

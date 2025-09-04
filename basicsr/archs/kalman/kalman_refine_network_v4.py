@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
+from .difficult_zone_estimators import DifficultZoneEstimatorV4
 from .kalman_filter import KalmanFilter
-from .kalman_gain_calulators import build_gain_calculator
-from .predictors import KalmanPredictorV0
-from .uncertainty_estimators import build_uncertainty_estimator
-from .utils import calculate_difference, cal_ae, cal_bce, cal_cs
+from .kalman_gain_calulators_v4 import build_gain_calculator_for_v4
+from .kalman_predictors import build_predictor
+from .uncertainty_estimators_v4 import build_uncertainty_estimator_for_v4
 
 
 class KalmanRefineNetV4(nn.Module):
@@ -28,18 +27,16 @@ class KalmanRefineNetV4(nn.Module):
     ):
         super(KalmanRefineNetV4, self).__init__()
 
-        self.difficult_zone_estimator = DifficultZoneEstimator(dim)
+        self.difficult_zone_estimator = DifficultZoneEstimatorV4(dim)
 
-        self.uncertainty_estimator = build_uncertainty_estimator(
+        self.uncertainty_estimator = build_uncertainty_estimator_for_v4(
             mode=uncertainty_estimation_mode, seq_length=img_seq, dim=dim
         )
 
-        kalman_gain_calculator = build_gain_calculator(mode=gain_calculation_mode, dim=dim)
+        kalman_gain_calculator = build_gain_calculator_for_v4(mode=gain_calculation_mode, dim=dim)
+        predictor = build_predictor('convolutional', dim=dim, seq_length=img_seq)
 
-        self.kalman_filter = KalmanFilter(
-            kalman_gain_calculator=kalman_gain_calculator,
-            predictor=KalmanPredictorV0(dim),
-        )
+        self.kalman_filter = KalmanFilter(kalman_gain_calculator=kalman_gain_calculator, predictor=predictor)
 
         self.with_difficult_zone_affine = with_difficult_zone_affine  #
         if self.with_difficult_zone_affine:
@@ -98,51 +95,3 @@ class KalmanRefineNetV4(nn.Module):
         refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
 
         return refined
-
-
-class DifficultZoneEstimator(nn.Module):
-    def __init__(self, channel: int):
-        super(DifficultZoneEstimator, self).__init__()
-
-        self.channel = channel
-
-        self.channel_stacked = 3 * channel + 1
-        self.estimator_main = nn.Sequential(
-            nn.Conv2d(self.channel_stacked, self.channel_stacked, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
-            nn.Conv2d(self.channel_stacked, self.channel_stacked, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, self.channel_stacked, eps=1e-6),
-            nn.Conv2d(self.channel_stacked, channel, kernel_size=3, padding='same'),
-        )
-        self.residual_ratio = 0.4
-
-    def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        """
-        :param a: shape [B, C, H, W]
-        :param b: shape [B, C, H, W]
-        :param c: shape [B, C, H, W]
-        :return: Difficult Zone, shape [B, C, H, W]
-        """
-
-        ##################################
-        ###### Compress Channels #########
-        ##################################
-
-        ae_difference = calculate_difference(cal_ae, b, a, c)  # [B, C, H, W]
-        # kl_difference = calculate_deference(cal_kl, b, a, c)  # [B, C, H, W]
-        bce_difference = calculate_difference(cal_bce, b, a, c)  # [B, C, H, W]
-        cs_difference = calculate_difference(cal_cs, b, a, c)  # [B, 1, H, W]
-
-        all_difference = torch.cat((b, cs_difference, ae_difference, bce_difference), dim=1)  # [B, C', H, W]
-
-        ##################################
-        #### Difficult Zone Estimation ###
-        ##################################
-
-        # ([B, C', H, W] -> [B, C, H, W]) * (1-r) + [B, C, H, W] * r
-        difficult_zone = (self.estimator_main(all_difference) * (1 - self.residual_ratio) +
-                          ae_difference * self.residual_ratio)
-
-        return difficult_zone

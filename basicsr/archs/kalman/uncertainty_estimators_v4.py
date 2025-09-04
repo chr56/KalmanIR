@@ -3,8 +3,10 @@ from torch import nn
 from torch.nn import functional as F
 from einops import rearrange, repeat
 
+from .utils import unpatch_and_unpad, pad_and_patch
 
-def build_uncertainty_estimator(mode, dim, seq_length) -> nn.Module:
+
+def build_uncertainty_estimator_for_v4(mode, dim, seq_length) -> nn.Module:
     if mode == "iterative_convolutional":
         return UncertaintyEstimatorIterativeConvolutional(dim)
     elif mode == "iterative_narrow_mamba_block":
@@ -175,15 +177,15 @@ class UncertaintyEstimatorIterativeDecoderLayer(nn.Module):
 
         batch, length, channel, height, width = image_sequence.shape
 
-        difficult_zone, original, padding = _pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
-        sigma, _, _ = _pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
+        difficult_zone, original, padding = pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
+        sigma, _, _ = pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
 
         uncertainty = []
         for i in range(length):
-            img_patches, _, _ = _pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, D]
+            img_patches, _, _ = pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, D]
             u = self.decoder_sigma_merge(img_patches, sigma)
             u = self.decoder_difficult_zone_merge(difficult_zone, u)
-            u = _unpatch_and_unpad(u, original, padding, self.patch_size)
+            u = unpatch_and_unpad(u, original, padding, self.patch_size)
             uncertainty.append(u)
 
         uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
@@ -221,14 +223,14 @@ class UncertaintyEstimatorOneDecoderLayer(nn.Module):
         difficult_zone = repeat(difficult_zone, 'b c h w -> b (l c) h w', l=length).contiguous()  # [B, LC, H, W]
         sigma = repeat(sigma, 'b c h w -> b (l c) h w', l=length).contiguous()  # [B, LC, H, W]
 
-        image_sequence, original, padding = _pad_and_patch(image_sequence, self.patch_size)  # [N, P^2, D]
-        difficult_zone, _, _ = _pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
-        sigma, _, _ = _pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
+        image_sequence, original, padding = pad_and_patch(image_sequence, self.patch_size)  # [N, P^2, D]
+        difficult_zone, _, _ = pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
+        sigma, _, _ = pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
 
         u = self.decoder_sigma_merge(image_sequence, sigma)
         u = self.decoder_difficult_zone_merge(difficult_zone, u)
 
-        u = _unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, LC, H, W]
+        u = unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, LC, H, W]
         u = rearrange(u, 'b (l c) h w -> b l c h w', l=length).contiguous()  # [B, L, C, H, W]
 
         return u
@@ -269,17 +271,17 @@ class UncertaintyEstimatorIterativeConvolutionalCrossAttention(nn.Module):
 
         batch, length, channel, height, width = image_sequence.shape
 
-        difficult_zone_patched, original, padding = _pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, C]
-        sigma_patched, _, _ = _pad_and_patch(sigma, self.patch_size)  # [N, P^2, C]
+        difficult_zone_patched, original, padding = pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, C]
+        sigma_patched, _, _ = pad_and_patch(sigma, self.patch_size)  # [N, P^2, C]
 
         uncertainty = []
         for i in range(length):
-            img, _, _ = _pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, C]
+            img, _, _ = pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, C]
             u = self.norm_sigma_merge(img)
             u, _ = self.attention_sigma_merge(u, sigma_patched, sigma_patched)  # [B, HW, C]
             u = self.norm_img_merge(u)
             u, _ = self.attention_img_merge(difficult_zone_patched, u, u)  # [B, HW, C]
-            u = _unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, C, H, W]
+            u = unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, C, H, W]
             u = self.cnn_post(u) * (1 - self.residual_rate) + difficult_zone * self.residual_rate
             uncertainty.append(u)
 
@@ -313,17 +315,17 @@ class UncertaintyEstimatorIterativeCrossAttention(nn.Module):
 
         batch, length, channel, height, width = image_sequence.shape
 
-        difficult_zone, original, padding = _pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, C]
-        sigma, _, _ = _pad_and_patch(sigma, self.patch_size)  # [N, P^2, C]
+        difficult_zone, original, padding = pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, C]
+        sigma, _, _ = pad_and_patch(sigma, self.patch_size)  # [N, P^2, C]
 
         uncertainty = []
         for i in range(length):
-            img, _, _ = _pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, C]
+            img, _, _ = pad_and_patch(image_sequence[:, i, ...], self.patch_size)  # [N, P^2, C]
             u = self.norm_sigma_merge(img)
             u, _ = self.attention_sigma_merge(u, sigma, sigma)  # [B, HW, C]
             u = self.norm_img_merge(u)
             u, _ = self.attention_img_merge(difficult_zone, u, u)  # [B, HW, C]
-            u = _unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, C, H, W]
+            u = unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, C, H, W]
             uncertainty.append(u)
 
         uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
@@ -362,16 +364,16 @@ class UncertaintyEstimatorOneCrossAttention(nn.Module):
 
         image_sequence = rearrange(image_sequence, 'b l c h w -> b (l c) h w').contiguous()  # [B, LC, H, W]
 
-        image_sequence, original, padding = _pad_and_patch(image_sequence, self.patch_size)  # [N, P^2, D]
-        sigma, _, _ = _pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
-        difficult_zone, _, _ = _pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
+        image_sequence, original, padding = pad_and_patch(image_sequence, self.patch_size)  # [N, P^2, D]
+        sigma, _, _ = pad_and_patch(sigma, self.patch_size)  # [N, P^2, D]
+        difficult_zone, _, _ = pad_and_patch(difficult_zone, self.patch_size)  # [N, P^2, D]
 
         u = self.norm_sigma_merge(image_sequence)
         u, _ = self.attention_sigma_merge(u, sigma, sigma)
         u = self.norm_difficult_zone_merge(u)
         u, _ = self.attention_difficult_zone_merge(u, difficult_zone, difficult_zone)
 
-        u = _unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, LC, H, W]
+        u = unpatch_and_unpad(u, original, padding, self.patch_size)  # [B, LC, H, W]
         u = rearrange(u, 'b (l c) h w -> b l c h w', l=length).contiguous()  # [B, L, C, H, W]
 
         return u
@@ -475,57 +477,3 @@ class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
 
         uncertainty = torch.stack(uncertainty, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
         return uncertainty
-
-
-def _pad_and_patch(x: torch.Tensor, patch_size: int):
-    """
-    :param x: shape [B, D, H, W]
-    :param patch_size: width and height of patch, P
-    :return: shape [N, P^2, D], N = B * (H/P) * (W/P)
-    """
-    batch_size, _, origin_h, origin_w = x.shape
-
-    pad_h = (patch_size - origin_h % patch_size) % patch_size
-    pad_w = (patch_size - origin_w % patch_size) % patch_size
-
-    if pad_h > 0 or pad_w > 0:
-        x = F.pad(x, (0, pad_w, 0, pad_h), mode='reflect')
-
-    x_patched = rearrange(x,
-                          'b d (hs p1) (ws p2) -> (b hs ws) (p1 p2) d',
-                          p1=patch_size, p2=patch_size, )
-
-    return x_patched.contiguous(), (origin_h, origin_w), (pad_h, pad_w)
-
-
-def _unpatch_and_unpad(
-        x_patched: torch.Tensor,
-        original_size: tuple,
-        padding: tuple, patch_size: int
-):
-    """
-    :param x_patched: shape [N, P^2, D], N = B * (H/P) * (W/P)
-    :param original_size: tuple of (H, W)
-    :param padding: tuple of (pad_h, pad_w)
-    :param patch_size: P
-    :return: shape [B, D, H, W]
-    """
-
-    origin_h, origin_w = original_size
-    pad_h, pad_w = padding
-
-    n, _, d = x_patched.shape
-    height = origin_h + pad_h
-    width = origin_w + pad_w
-    hs = height // patch_size
-    ws = width // patch_size
-    b = n // (hs * ws)
-
-    x = rearrange(x_patched,
-                  '(b hs ws) (p1 p2) d -> b d (hs p1) (ws p2)',
-                  b=b, hs=hs, ws=ws, p1=patch_size, p2=patch_size, )
-
-    if pad_h > 0 or pad_w > 0:
-        x = x[:, :, :origin_h, :origin_w]
-
-    return x.contiguous()
