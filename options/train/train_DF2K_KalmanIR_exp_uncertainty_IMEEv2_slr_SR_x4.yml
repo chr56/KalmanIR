@@ -1,5 +1,5 @@
 # general settings for image SR training
-name: KalmanIR_exp_uncertainty_imee_ver2_rev1_slr
+name: KalmanIR_exp_uncertainty_imee_ver2_rev2_slr
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
 model_output_enabled: [0, 1] # enabled output images

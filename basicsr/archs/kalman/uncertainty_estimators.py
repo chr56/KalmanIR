@@ -139,7 +139,7 @@ class UncertaintyEstimatorIterativeWideMambaBlock(nn.Module):
         uncertainty = []
         for i in range(length):
             x = torch.cat((difficult_zone, self.norm(image_sequence[:, i, ...]), sigma), dim=1)
-            x = x.permute(0, 2, 3, 1) # [B, C', H, W] -> [B, H, W, C']
+            x = x.permute(0, 2, 3, 1)  # [B, C', H, W] -> [B, H, W, C']
             x = self.vss_block(x)
             x = x.permute(0, 3, 1, 2)  # [B, H, W, C'] -> [B, C', H, W]
             x = self.channel_compressor(x)
@@ -439,15 +439,12 @@ class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
 
         from .utils import LayerNorm2d
         self.feat_dim = 36
-        self.shallow_feature_extractor = nn.Sequential(
-            nn.Conv2d(channel, self.feat_dim, kernel_size=1, padding='same'),
-            nn.SiLU(inplace=True),
-            LayerNorm2d(self.feat_dim),
-            nn.Conv2d(self.feat_dim, self.feat_dim, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            LayerNorm2d(self.feat_dim),
+        self.merger = nn.Sequential(
+            LayerNorm2d(2 * channel),
+            nn.Conv2d(2 * channel, self.feat_dim, kernel_size=3, padding='same'),
+            nn.LeakyReLU(inplace=True),
             nn.Conv2d(self.feat_dim, channel, kernel_size=1, padding='same'),
-            nn.Sigmoid(),
+            LayerNorm2d(channel),
         )
         self.mamba_adjust = SS2DChanelFirst(d_model=channel, **kwargs)
 
@@ -458,7 +455,7 @@ class UncertaintyEstimatorIterativeMambaErrorEstimationV2(nn.Module):
         return next_state, current_state
 
     def _forward_uncertainty_estimate(self, state, image):
-        features = self.shallow_feature_extractor(image)
+        features = self.merger(torch.cat((state, image), dim=1))
         weights = torch.sigmoid_(self.mamba_adjust(features)) * 2
         return weights * state
 
