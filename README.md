@@ -57,58 +57,6 @@ TODO
 
 ## <a name="results"></a> 🥇 Results
 
-We achieve state-of-the-art performance on various image restoration tasks. Detailed results can be found in the paper.
-
-
-<details>
-<summary>Evaluation on Classic SR (click to expand)</summary>
-
-<p align="center">
-  <img width="500" src="assets/classicSR.png">
-</p>
-</details>
-
-
-
-<details>
-<summary>Evaluation on Lightweight SR (click to expand)</summary>
-
-<p align="center">
-  <img width="500" src="assets/lightSR.png">
-</p>
-</details>
-
-
-<details>
-<summary>Evaluation on Gaussian Color Image Denoising (click to expand)</summary>
-
-<p align="center">
-  <img width="500" src="assets/gaussian_dn.png">
-</p>
-
-</details>
-
-
-
-<details>
-<summary>Evaluation on Real Image Denoising (click to expand)</summary>
-
-<p align="center">
-  <img width="500" src="assets/real-dn.png">
-</p>
-
-</details>
-
-
-<details>
-<summary>Evaluation on Effective Receptive Filed (click to expand)</summary>
-
-<p align="center">
-  <img width="600" src="assets/erf.png">
-</p>
-
-</details>
-
 
 ## <a name="installation"></a> :wrench: Installation
 
