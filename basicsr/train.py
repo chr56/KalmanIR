@@ -19,7 +19,7 @@ from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
 from basicsr.models import build_model
 from basicsr.utils import (AvgTimer, MessageLogger, check_resume, get_env_info, get_root_logger, get_time_str,
                            init_tb_logger, init_wandb_logger, make_exp_dirs, mkdir_and_rename, scandir)
-from basicsr.utils.options import copy_opt_file, dict2str, parse_options
+from basicsr.utils.options import copy_opt_file, dict2str, parse_options, parse_val_profiles
 
 
 def init_tb_loggers(opt):
@@ -154,11 +154,13 @@ def train_pipeline(root_path):
     else:
         raise ValueError(f"Wrong prefetch_mode {prefetch_mode}. Supported ones are: None, 'cuda', 'cpu'.")
 
+    # validation settings
+    val_profiles = parse_val_profiles(opt.get('val'), debug=('debug' in opt['name']))
 
     # training
     logger.info(f'Start training from epoch: {start_epoch}, iter: {current_iter}')
     data_timer, iter_timer = AvgTimer(), AvgTimer()
-    stage_timer = AvgTimer(window=4)
+    # stage_timer = AvgTimer(window=4)
     start_time = time.time()
 
     for epoch in range(start_epoch, total_epochs + 1):
@@ -197,24 +199,24 @@ def train_pipeline(root_path):
                 model.save(epoch, current_iter)
 
             # validation
-            if opt.get('val') is not None and (current_iter % opt['val']['val_freq'] == 0):
-                # if len(val_loaders) > 1:
-                #     logger.warning('Multiple validation datasets are *only* supported by SRModel.')
+            if opt.get('val') is not None and val_profiles:
+                for profile_name, profile in val_profiles.items():
+                    if profile.check(current_iter):
+                        msg_logger.logger.info(f"Validating ({profile_name})...")
 
-                validation_time = time.time()
+                        validation_time = time.time()
+                        for val_loader in profile.filter_datasets(val_loaders):
+                            model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
+                        validation_time = time.time() - validation_time
+                        # stage_timer.record()
 
-                for val_loader in val_loaders:
-                    model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
-
-                validation_time = time.time() - validation_time
-                stage_timer.record()
-
-                msg_logger.logger.info(
-                    "\n"
-                    f"\t> Current validation took {validation_time:.1f}s. \n"
-                    f"\t> Current mini epoch took {stage_timer.get_current_time():.1f}s. \n"
-                    f"\t> ETA: {calculate_eta(current_iter, total_iters, start_time)} \n"
-                )
+                        msg_logger.logger.info(
+                            "\n"
+                            f"\t> Current validation took {validation_time:.1f}s. \n"
+                            # f"\t> Current mini epoch took {stage_timer.get_current_time():.1f}s. \n"
+                            f"\t> ETA: {calculate_eta(current_iter, total_iters, start_time)} \n"
+                        )
+                        pass
 
             data_timer.start()
             iter_timer.start()
@@ -227,8 +229,12 @@ def train_pipeline(root_path):
     logger.info(f'End of training. Time consumed: {consumed_time}')
     logger.info('Save the latest model.')
     model.save(epoch=-1, current_iter=-1)  # -1 stands for the latest
-    if opt.get('val') is not None:
-        for val_loader in val_loaders:
+    if opt.get('val') is not None and val_profiles:
+        target_loaders = val_loaders
+        end_profile = val_profiles.get('end')
+        if end_profile is not None:
+            target_loaders = end_profile.filter_datasets(val_loaders)
+        for val_loader in target_loaders:
             model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
     if tb_logger:
         tb_logger.close()
