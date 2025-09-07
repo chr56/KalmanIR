@@ -1,5 +1,7 @@
 import argparse
 import random
+from typing import List, Optional
+
 import torch
 import yaml
 from collections import OrderedDict
@@ -192,3 +194,85 @@ def copy_opt_file(opt_file, experiments_root):
         lines.insert(0, f'# GENERATE TIME: {time.asctime()}\n# CMD:\n# {cmd}\n\n')
         f.seek(0)
         f.writelines(lines)
+
+
+class ValidationProfile:
+    def __init__(self,
+                 name: str,
+                 iter_start: int,
+                 iter_frequency: int,
+                 datasets: List[str],
+                 ):
+        self.name = name
+        self.start = iter_start
+        self.frequency = iter_frequency
+        self.datasets = datasets
+
+    def check(self, current_iteration) -> bool:
+        if current_iteration > 0 and self.frequency > 0:
+            return current_iteration > self.start and (current_iteration - self.start) % self.frequency == 0
+        else:
+            return False
+
+    def filter_datasets(self, val_loaders: list) -> list:
+
+        if len(self.datasets) == 0:
+            return val_loaders
+
+        target_val_loaders = []
+        for loader in val_loaders:
+            dataset = loader.dataset
+            if hasattr(dataset, 'opt'):
+                dataset_name = dataset.opt.get('name', None)
+                if dataset_name is not None:
+                    if dataset_name in self.datasets:
+                        target_val_loaders.append(loader)
+                    continue
+                else:
+                    import warnings
+                    warnings.warn(f"Dataset {dataset} is unnamed!")
+            else:
+                import warnings
+                warnings.warn(f"Dataset {dataset} is invalid!")
+        return target_val_loaders
+
+    def __repr__(self):
+        return (f"ValidationProfile({self.name}, "
+                f"start={self.start}, frequency={self.frequency}), "
+                f"datasets={self.datasets})")
+
+
+def build_validation_profile(name: str, opt: dict, default: dict, debug: bool) -> ValidationProfile:
+    start = int(opt.get('start', default.get('start', 0)))
+    frequency = int(opt.get('frequency', default.get('frequency', 0)))
+    datasets = opt.get('datasets', [])
+    if debug:
+        start = int(start / 500)
+        frequency = int(frequency / 500)
+    return ValidationProfile(name, start, frequency, datasets)
+
+
+def parse_val_profiles(val_opt: dict, debug: bool):
+    if val_opt is None:
+        return None
+
+    profiles = OrderedDict()
+    with_profile = False
+
+    # look up for profiles
+    for key, value in val_opt.items():
+        if key.startswith('profile_'):
+            with_profile = True
+            name = key.split('_')[1]
+            profiles[name] = build_validation_profile(name, value, val_opt, debug)
+
+    if not with_profile:
+        # no profile found, use globally
+        profiles['default'] = build_validation_profile('default', val_opt, val_opt, debug)
+
+    # profile that at end of training
+    profile_end = val_opt.get('end')
+    if profile_end is not None:
+        profiles['end'] = build_validation_profile('end', profile_end, val_opt, debug)
+
+    return profiles
