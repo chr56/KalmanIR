@@ -82,7 +82,7 @@ class KalmanRefineNetV6(nn.Module):
         refined_with_kf = self.kalman_filter.perform_filtering(
             image_sequence,
             kalman_gain,
-            self.kalman_preditor.forward,
+            self.kalman_preditor.__call__,
         )
 
         #####################################
