@@ -1,8 +1,8 @@
 # general settings for image SR training
-name: KalmanIR_V4_L1_FourierL1_PerceptualL1_GAN_test1
+name: KalmanIR_V4_original
 model_type: KalmanSRModel
 model_output: ['B', 'B', 'B', 'B']
-model_output_enabled: [0, 1, 2, 3] # enabled output images
+model_output_enabled: [0, 1] # enabled output images
 scale: 4
 num_gpu: 1
 manual_seed: 42
@@ -21,6 +21,9 @@ network_g:
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
+  uncertainty_estimation_mode: ''
+  gain_calculation_mode: ''
+  with_difficult_zone_affine: false
 
 network_d: # Discriminator used in GAN loss
   type: VGGStyleDiscriminator
@@ -122,6 +125,21 @@ val:
       type: calculate_ssim
       crop_border: 4
       test_y_channel: true
+
+  profile_quick:
+    start: 0
+    frequency: !!float 5e3
+    datasets:
+      - Set5
+      - Set14
+
+  profile_slow:
+    start: !!float 10e3
+    frequency: !!float 40e3
+    datasets:
+      - Urban100
+      - BSDS100
+      - Manga109
 
 
 # logging settings
