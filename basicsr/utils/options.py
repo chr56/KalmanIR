@@ -244,11 +244,11 @@ class ValidationProfile:
 
 def build_validation_profile(name: str, opt: dict, default: dict, debug: bool) -> ValidationProfile:
     start = int(opt.get('start', default.get('start', 0)))
-    frequency = int(opt.get('frequency', default.get('frequency', 0)))
+    frequency = int(opt.get('frequency', default.get('frequency', default.get('val_freq', 0))))
     datasets = opt.get('datasets', [])
     if debug:
         start = int(start / 500)
-        frequency = int(frequency / 500)
+        frequency = max(500, int(frequency / 500))
     return ValidationProfile(name, start, frequency, datasets)
 
 
