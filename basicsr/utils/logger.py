@@ -194,7 +194,8 @@ def get_env_info():
     import torchvision
 
     from basicsr.version import __version__
-    msg = r"""
+    msg = get_git_revision()
+    msg += r"""
                 ____                _       _____  ____
                / __ ) ____ _ _____ (_)_____/ ___/ / __ \
               / __  |/ __ `// ___// // ___/\__ \ / /_/ /
@@ -211,3 +212,30 @@ def get_env_info():
             f'\n\tPyTorch: {torch.__version__}'
             f'\n\tTorchVision: {torchvision.__version__}')
     return msg
+
+
+def get_git_revision() -> str:
+    from os import path, getcwd
+    from subprocess import run, CalledProcessError
+
+    if not path.isdir(path.join(getcwd(), '.git')):
+        return f"Git revision is not available for `{getcwd()}` "
+
+    def run_cmd(cmd):
+        return run(cmd, check=True, text=True, capture_output=True, timeout=3000)
+
+    def uncommited_files(output: str) -> str:
+        if len(output) <= 0:
+            return ""
+        files = output.splitlines()
+        files = [line for line in files if not line.startswith('?')]
+        files = "\n".join(files)
+        return f"Uncommited files:\n{files}"
+
+    try:
+        git_hash = run_cmd(['git', 'rev-parse', 'HEAD']).stdout.strip()
+        git_status = run_cmd(['git', 'status', '--porcelain']).stdout
+
+        return f"Repo Git Commit: {git_hash}\n{uncommited_files(git_status)}"
+    except CalledProcessError as e:
+        return f"{e}"
