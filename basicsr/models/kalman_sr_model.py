@@ -167,8 +167,7 @@ class KalmanSRModel(BaseModel):
                     l_total += l_style
                     loss_dict[f'l_{name}' if not l_perceptual else f'l_{name}_style'] = l_style
             elif mode == 'gan':
-                with torch.no_grad():
-                    d_out = F.sigmoid(self.net_d(sr))
+                d_out = F.sigmoid(self.net_d(sr))
                 l_gan = loss_fn(d_out, True)
                 l_total += l_gan
                 loss_dict[f'l_{name}'] = l_gan
