@@ -6,6 +6,11 @@ tb_logger/
 experiments/
 results/
 
+*.log
+*.logs
+*nohup
+nohup*
+
 pretrain_weights/*.pth
 
 *.so
