@@ -78,6 +78,7 @@ class KalmanSRModel(BaseModel):
         losses = MultipleLossOptions(losses_options, self.model_output_format, 'D')
         logger.info(f"All losses: \n{losses}")
         self.criteria_per_output = losses
+        self.train_gan_discriminator = train_opt.get('train_discriminator', False)
         if require_discriminator:
             logger.info('Loading pretrained discriminator...')
             self.load_pretrained_discriminator(self.opt['network_d'])
@@ -85,6 +86,13 @@ class KalmanSRModel(BaseModel):
         # set up optimizers
         self.optimizer_g = read_optimizer_options(train_opt, self.net_g, logger)
         self.optimizers.append(self.optimizer_g)
+
+        if self.train_gan_discriminator:
+            logger.info("GAN discriminator is now trainable!")
+            self.train_discriminator_start_iter = train_opt.get('train_discriminator_start_iter', 0)
+            self.train_discriminator_frequency = train_opt.get('train_discriminator_frequency', 1)
+            self.optimizer_d = read_optimizer_options(self.opt['train'], self.net_d, logger, is_discriminator=True)
+            self.optimizers.append(self.optimizer_d)
 
         # set up schedulers
         self.setup_schedulers()
@@ -98,10 +106,10 @@ class KalmanSRModel(BaseModel):
             self.load_network(
                 self.net_d, pretrained_path, self.opt['path'].get('strict_load_d', True), param_key
             )
-            self.net_d.eval()
-            for p in self.net_d.parameters():
-                p.requires_grad = False
-        else:
+            if not self.train_gan_discriminator:
+                self.net_d.eval()
+                self._discriminator_parameters_grad(frozen=True)
+        elif not self.train_gan_discriminator:
             raise ValueError("No pretrained discriminator network, GAN Loss not available!")
 
     def setup_ema_decay(self, train_opt, logger):
@@ -128,6 +136,13 @@ class KalmanSRModel(BaseModel):
 
         loss_dict = OrderedDict()
 
+        ###
+        ### optimize net_g
+        ###
+
+        if self.train_gan_discriminator:
+            self._discriminator_parameters_grad(frozen=True)
+
         self.optimizer_g.zero_grad()
         output = self.net_g(self.lq)
 
@@ -135,6 +150,22 @@ class KalmanSRModel(BaseModel):
         l_total.backward()
 
         self.optimizer_g.step()
+
+        ###
+        ### optimize net_d
+        ###
+        if (self.train_gan_discriminator and
+                current_iter > self.train_discriminator_start_iter and
+                current_iter % self.train_discriminator_frequency == 0):
+            self._discriminator_parameters_grad(frozen=False)
+
+            self.optimizer_d.zero_grad()
+            self.backward_discriminator_losses(output, self.criteria_per_output.all_gan_losses, loss_dict)
+            self.optimizer_d.step()
+
+        ###
+        ###
+        ###
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
@@ -179,6 +210,81 @@ class KalmanSRModel(BaseModel):
                         loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
                 pass
         return l_total
+
+    def backward_discriminator_losses(self, outputs, gan_losses: list, loss_dict):
+
+        if len(gan_losses) < 1:
+            get_root_logger().warning(f'No GAN losses found, skipping discriminator loss.')
+            return
+
+        for gan_loss in gan_losses:
+            name = gan_loss['name']
+            loss_fn_gan = gan_loss['loss_fn']
+            output_transform = gan_loss['output_transform']
+
+            sr = output_transform(outputs)
+
+            # real
+            real_d_pred = self.net_d(self.gt)
+            l_d_real = loss_fn_gan(real_d_pred, True, is_disc=True)
+            loss_dict[f'l_{name}_discr_real'] = l_d_real
+            loss_dict[f'out_{name}_discr_real'] = torch.mean(real_d_pred.detach())
+            l_d_real.backward()
+            # fake
+            fake_d_pred = self.net_d(sr.detach())
+            l_d_fake = loss_fn_gan(fake_d_pred, False, is_disc=True)
+            loss_dict[f'l_{name}_discr_fake'] = l_d_fake
+            loss_dict[f'out_{name}_discr_fake'] = torch.mean(fake_d_pred.detach())
+            l_d_fake.backward()
+
+        return loss_dict
+
+    def forward_model(self):
+        """Forward model with partitioned lq data"""
+        # padding image and calculate partition parameters
+        img, col, row, mod_pad_h, mod_pad_w, split_h, split_w, shave_h, shave_w = calculate_and_padding_image(self.lq)
+
+        B, C, H, W = img.shape
+        scale = self.opt.get('scale', 1)
+
+        # list of partition borders
+        chopping_boxes = calculate_borders_for_chopping(
+            col, row, split_h, split_w, shave_h, shave_w
+        )
+
+        # list of patches / partitions
+        partitioned_img = []
+        for box in chopping_boxes:
+            h_range, w_range = box
+            partitioned_img.append(img[..., h_range, w_range])
+
+        del chopping_boxes
+
+        output_size = len(self.model_output_format)
+        prediction_patches = {k: [] for k in range(output_size)}
+
+        # image processing of each partition
+        for patch in partitioned_img:
+            raw_outputs = self.net_g(patch) if not hasattr(self, 'net_g_ema') else self.net_g_ema(patch)
+            assert hasattr(raw_outputs, '__len__'), "model output must be iterable"
+            assert len(raw_outputs) == output_size, "model image output size mismatched with settings"
+            for k in self.enabled_output_indexes:
+                patch = convert_format(
+                    raw_outputs[k], from_format=self.model_output_format[k], to_format='D'
+                )
+                prediction_patches[k].append(patch)
+                pass
+
+        predictions = dict()
+        for k in self.enabled_output_indexes:
+            predictions[k] = recover_from_patches_and_remove_paddings(
+                prediction_patches[k], col, row,
+                B, C, W, H, scale,
+                split_h, split_w, shave_h, shave_w,
+                mod_pad_h, mod_pad_w, scale
+            )
+
+        self.output_images = predictions
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
         if self.opt['rank'] == 0:
@@ -336,3 +442,7 @@ class KalmanSRModel(BaseModel):
         if hasattr(self, 'net_d'):
             self.save_network(self.net_d, 'net_d', current_iter)
         self.save_training_state(epoch, current_iter)
+
+    def _discriminator_parameters_grad(self, frozen: bool):
+        for p in self.net_d.parameters():
+            p.requires_grad = (not frozen)
