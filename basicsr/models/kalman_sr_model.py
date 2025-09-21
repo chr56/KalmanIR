@@ -18,7 +18,11 @@ from basicsr.utils.img_util import (
 )
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
-from .util_config import read_loss_options, read_optimizer_options, valid_model_output_settings
+from .util_config import (
+    read_loss_options,
+    read_optimizer_options,
+    valid_model_output_settings,
+)
 
 
 @MODEL_REGISTRY.register()
@@ -116,28 +120,25 @@ class KalmanSRModel(BaseModel):
         self.gt = data['gt'].to(self.device)
 
     def optimize_parameters(self, current_iter):
-        # scaler = GradScaler()
+
+        loss_dict = OrderedDict()
+
         self.optimizer_g.zero_grad()
-        # with autocast():
         output = self.net_g(self.lq)
 
-        l_total, loss_dict = self.calculate_losses(output, self.criteria)
-
+        l_total = self.calculate_losses(output, self.criteria, loss_dict)
         l_total.backward()
-        # scaler.scale(l_total).backward()
 
         self.optimizer_g.step()
-        # scaler.step(self.optimizer_g)
-        # scaler.update()
+
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
         if self.ema_decay > 0:
             self.model_ema(decay=self.ema_decay)
 
-    def calculate_losses(self, outputs, criteria):
+    def calculate_losses(self, outputs, criteria, loss_dict):
         """Calculate multiple losses"""
         l_total = 0
-        loss_dict = OrderedDict()
         # calculate losses
         for name, criterion in criteria.items():
             mode = criterion['mode']
@@ -175,7 +176,7 @@ class KalmanSRModel(BaseModel):
                 if self.log_gan_output:
                     loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
             pass
-        return l_total, loss_dict
+        return l_total
 
     def forward_model(self):
         """Forward model with partitioned lq data"""
