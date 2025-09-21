@@ -112,7 +112,7 @@ def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[di
     return criteria, require_discriminator
 
 
-def read_optimizer_options(train_opt, net_g, logger):
+def read_optimizer_options(train_opt, net_g, logger, is_discriminator=False):
     """
     Example of `train_opt`
     ```
@@ -134,56 +134,69 @@ def read_optimizer_options(train_opt, net_g, logger):
     ```
     """
 
-    partitioned_optimizer_opt = train_opt.get('partitioned_optimizer_g', None)
+    suffix = 'g' if not is_discriminator else 'd'
+
+    partitioned_optimizer_opt = train_opt.get(f"partitioned_optimizer_{suffix}", None)
+    legacy_optimizer_opt = train_opt.get(f"optim_{suffix}", None)
+
     if partitioned_optimizer_opt is not None and hasattr(net_g, 'partitioned_parameters'):
         # Optimizer with multiple parameters group
-
-        partitioned_parameters: Dict[str, Any] = net_g.partitioned_parameters()
-        remained_parameters_groups = list(partitioned_parameters.keys())
-
-        optim_type = partitioned_optimizer_opt['type']
-        default_settings = partitioned_optimizer_opt['default']
-        params = []
-        parameters_groups = partitioned_optimizer_opt.get('params', None)
-        if parameters_groups is not None:
-            for group_name, group_settings in parameters_groups.items():
-                params_group = partitioned_parameters.get(group_name, None)
-                assert params_group is not None, ValueError(
-                    f"Parameters group '{group_name}' not found"
-                    f" ( available group: {list(partitioned_parameters.keys())} )"
-                )
-                params.append(
-                    {'params': params_group, **group_settings}
-                )
-                remained_parameters_groups.remove(group_name)
-            pass
-        if len(remained_parameters_groups) > 0:
-            remaining_params_group = []
-            for key in remained_parameters_groups:
-                remaining_params_group.extend(partitioned_parameters[key])
-            params.append(
-                {'params': remaining_params_group, **default_settings}
-            )
-            pass
-
-        optimizer_g = lookup_optimizer(optim_type, params, **default_settings)
-        logger.info(f"Created [{optim_type}] optimizer with {len(params)} parameters groups.")
-    else:
+        optimizer = _read_partitioned_optimizer(net_g, partitioned_optimizer_opt, logger)
+    elif legacy_optimizer_opt is not None:
         # Fallback to global optimizer
-        optim_opt = train_opt['optim_g']
+        optimizer = _read_legacy_optimizer(net_g, legacy_optimizer_opt, logger)
+    else:
+        raise ValueError('Optimizer option not defined.')
 
-        params = []
-        for k, v in net_g.named_parameters():
-            if v.requires_grad:
-                params.append(v)
-            else:
-                logger.warning(f"Params {k} will not be optimized.")
+    return optimizer
 
-        optim_type = optim_opt.pop('type')
-        optimizer_g = lookup_optimizer(optim_type, params, **optim_opt)
-        logger.info(f"Created global optimizer [{optim_type}].")
 
-    return optimizer_g
+def _read_partitioned_optimizer(model, partitioned_optimizer_opt, logger):
+    partitioned_parameters: Dict[str, Any] = model.partitioned_parameters()
+
+    remained_parameters_groups = list(partitioned_parameters.keys())
+    optim_type = partitioned_optimizer_opt['type']
+    default_settings = partitioned_optimizer_opt['default']
+    params = []
+    parameters_groups = partitioned_optimizer_opt.get('params', None)
+    if parameters_groups is not None:
+        for group_name, group_settings in parameters_groups.items():
+            params_group = partitioned_parameters.get(group_name, None)
+            assert params_group is not None, ValueError(
+                f"Parameters group '{group_name}' not found"
+                f" (available group: {list(partitioned_parameters.keys())})"
+            )
+            params.append(
+                {'params': params_group, **group_settings}
+            )
+            remained_parameters_groups.remove(group_name)
+        pass
+    if len(remained_parameters_groups) > 0:
+        remaining_params_group = []
+        for key in remained_parameters_groups:
+            remaining_params_group.extend(partitioned_parameters[key])
+        params.append(
+            {'params': remaining_params_group, **default_settings}
+        )
+        pass
+    optimizer = lookup_optimizer(optim_type, params, **default_settings)
+    model_name = model.__class__.__name__
+    logger.info(f"Created [{optim_type}] optimizer with {len(params)} parameters groups for [{model_name}].")
+    return optimizer
+
+
+def _read_legacy_optimizer(model, optim_opt, logger):
+    params = []
+    for k, v in model.named_parameters():
+        if v.requires_grad:
+            params.append(v)
+        else:
+            logger.warning(f"Params {k} will not be optimized.")
+    optim_type = optim_opt.pop('type')
+    optimizer = lookup_optimizer(optim_type, params, **optim_opt)
+    model_name = model.__class__.__name__
+    logger.info(f"Created a global optimizer [{optim_type}] for [{model_name}].")
+    return optimizer
 
 
 def _extract(name, opt_, key, default):
