@@ -110,6 +110,8 @@ class MessageLogger():
             if self.use_tb_logger and 'debug' not in self.exp_name:
                 if k.startswith('l_'):
                     self.tb_logger.add_scalar(f'losses/{k}', v, current_iter)
+                elif k.startswith('out_'):
+                    self.tb_logger.add_scalar(f'outputs/{k}', v, current_iter)
                 else:
                     self.tb_logger.add_scalar(k, v, current_iter)
         self.logger.info(message)
