@@ -372,6 +372,8 @@ class KalmanSRModel(BaseModel):
             self.save_network([self.net_g, self.net_g_ema], 'net_g', current_iter, param_key=['params', 'params_ema'])
         else:
             self.save_network(self.net_g, 'net_g', current_iter)
+        if hasattr(self, 'net_d'):
+            self.save_network(self.net_d, 'net_d', current_iter)
         self.save_training_state(epoch, current_iter)
 
     def _convert_format(self, tensor: torch.Tensor, from_format, to_format) -> torch.Tensor:
