@@ -55,6 +55,7 @@ class KalmanSRModel(BaseModel):
             self.criteria = None
             self.optimizer_g = None
             self.init_training_settings()
+            self.log_gan_output = self.opt.get('log_gan_output_values', True)
 
     def init_training_settings(self):
         self.net_g.train()
@@ -171,6 +172,8 @@ class KalmanSRModel(BaseModel):
                 l_gan = loss_fn(d_out, True)
                 l_total += l_gan
                 loss_dict[f'l_{name}'] = l_gan
+                if self.log_gan_output:
+                    loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
             pass
         return l_total, loss_dict
 
