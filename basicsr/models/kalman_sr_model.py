@@ -19,6 +19,8 @@ from basicsr.utils.img_util import (
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 from .util_config import (
+    convert_format,
+    MultipleLossOptions,
     read_loss_options,
     read_optimizer_options,
     valid_model_output_settings,
@@ -56,7 +58,7 @@ class KalmanSRModel(BaseModel):
 
         # training settings
         if self.is_train:
-            self.criteria = None
+            self.criteria_per_output = None
             self.optimizer_g = None
             self.init_training_settings()
             self.log_gan_output = self.opt.get('log_gan_output_values', True)
@@ -69,10 +71,12 @@ class KalmanSRModel(BaseModel):
         self.setup_ema_decay(train_opt, logger)
 
         # define losses
-        criteria, require_discriminator = read_loss_options(
+        losses_options, require_discriminator = read_loss_options(
             train_opt, self.device, len(self.model_output_format), logger
         )
-        self.criteria = criteria
+        losses = MultipleLossOptions(losses_options, self.model_output_format, 'D')
+        logger.info(f"All losses: \n{losses}")
+        self.criteria_per_output = losses
         if require_discriminator:
             logger.info('Loading pretrained discriminator...')
             self.load_pretrained_discriminator(self.opt['network_d'])
@@ -126,7 +130,7 @@ class KalmanSRModel(BaseModel):
         self.optimizer_g.zero_grad()
         output = self.net_g(self.lq)
 
-        l_total = self.calculate_losses(output, self.criteria, loss_dict)
+        l_total = self.calculate_losses(output, self.criteria_per_output.losses(), loss_dict)
         l_total.backward()
 
         self.optimizer_g.step()
@@ -136,46 +140,43 @@ class KalmanSRModel(BaseModel):
         if self.ema_decay > 0:
             self.model_ema(decay=self.ema_decay)
 
-    def calculate_losses(self, outputs, criteria, loss_dict):
+    def calculate_losses(self, outputs, losses, loss_dict):
         """Calculate multiple losses"""
         l_total = 0
         # calculate losses
-        for name, criterion in criteria.items():
-            mode = criterion['mode']
-            target_idx = criterion['target']
-            loss_fn = criterion['loss']
-            target_format = criterion['format']
-            if target_idx is None:
-                # mixed loss
-                sr = outputs
-            else:
-                # specified loss
-                sr = self._convert_format(
-                    outputs[target_idx],
-                    from_format=self.model_output_format[target_idx], to_format=target_format
-                )
-            if mode == 'pixel':
-                gt = self._convert_format(self.gt, from_format='D', to_format=target_format)
-                l_pixel = loss_fn(sr, gt)
-                l_total += l_pixel
-                loss_dict[f'l_{name}'] = l_pixel
-            elif mode == 'perceptual':
-                gt = self._convert_format(self.gt, from_format='D', to_format=target_format)
-                l_perceptual, l_style = loss_fn(sr, gt)
-                if l_perceptual is not None:
-                    l_total += l_perceptual
-                    loss_dict[f'l_{name}' if not l_style else f'l_{name}_perceptual'] = l_perceptual
-                if l_style is not None:
-                    l_total += l_style
-                    loss_dict[f'l_{name}' if not l_perceptual else f'l_{name}_style'] = l_style
-            elif mode == 'gan':
-                d_out = self.net_d(sr)
-                l_gan = loss_fn(d_out, True)
-                l_total += l_gan
-                loss_dict[f'l_{name}'] = l_gan
-                if self.log_gan_output:
-                    loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
-            pass
+        for output_index, losses_per_output in losses.items():
+            for criterion in losses_per_output:
+                name = criterion['name']
+                mode = criterion['mode']
+                loss_fn = criterion['loss_fn']
+
+                gt_transform = criterion['gt_transform']
+                output_transform = criterion['output_transform']
+
+                sr = output_transform(outputs)
+
+                if mode == 'pixel':
+                    gt = gt_transform(self.gt)
+                    l_pixel = loss_fn(sr, gt)
+                    l_total += l_pixel
+                    loss_dict[f'l_{name}'] = l_pixel
+                elif mode == 'perceptual':
+                    gt = gt_transform(self.gt)
+                    l_perceptual, l_style = loss_fn(sr, gt)
+                    if l_perceptual is not None:
+                        l_total += l_perceptual
+                        loss_dict[f'l_{name}' if not l_style else f'l_{name}_perceptual'] = l_perceptual
+                    if l_style is not None:
+                        l_total += l_style
+                        loss_dict[f'l_{name}' if not l_perceptual else f'l_{name}_style'] = l_style
+                elif mode == 'gan':
+                    d_out = self.net_d(sr)
+                    l_gan = loss_fn(d_out, True)
+                    l_total += l_gan
+                    loss_dict[f'l_{name}'] = l_gan
+                    if self.log_gan_output:
+                        loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
+                pass
         return l_total
 
     def forward_model(self):
@@ -375,13 +376,3 @@ class KalmanSRModel(BaseModel):
         if hasattr(self, 'net_d'):
             self.save_network(self.net_d, 'net_d', current_iter)
         self.save_training_state(epoch, current_iter)
-
-    def _convert_format(self, tensor: torch.Tensor, from_format, to_format) -> torch.Tensor:
-        if from_format == to_format:
-            return tensor
-        elif from_format == 'D' and to_format == 'B':
-            return decimal_to_binary((tensor * 255.))
-        elif from_format == 'B' and to_format == 'D':
-            return binary_to_decimal(tensor)
-        else:
-            raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
