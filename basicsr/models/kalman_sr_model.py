@@ -142,6 +142,7 @@ class KalmanSRModel(BaseModel):
 
         if self.train_gan_discriminator:
             self._discriminator_parameters_grad(frozen=True)
+            self.net_d.eval()
 
         self.optimizer_g.zero_grad()
         output = self.net_g(self.lq)
@@ -158,6 +159,7 @@ class KalmanSRModel(BaseModel):
                 current_iter > self.train_discriminator_start_iter and
                 current_iter % self.train_discriminator_frequency == 0):
             self._discriminator_parameters_grad(frozen=False)
+            self.net_d.train()
 
             self.optimizer_d.zero_grad()
             self.backward_discriminator_losses(output, self.criteria_per_output.all_gan_losses, loss_dict)
