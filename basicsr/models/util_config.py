@@ -1,7 +1,11 @@
 from collections import OrderedDict
+from functools import partial
 from typing import Dict, Any, Tuple
 
+from torch import Tensor
+
 from basicsr.losses import build_loss
+from basicsr.utils.binary_transform import decimal_to_binary, binary_to_decimal
 from basicsr.utils.logger import get_root_logger
 from basicsr.utils.module_util import lookup_optimizer
 
@@ -110,6 +114,99 @@ def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[di
         raise ValueError('No losses defined.')
     logger.info(f"{len(criteria)} losses defined.")
     return criteria, require_discriminator
+
+
+class MultipleLossOptions:
+
+    def __init__(self, losses_options: dict, model_output_format, gt_format):
+        self.losses_per_output: Dict[int, list] = dict()
+        self.all_gan_losses = list()
+
+        for name, loss in losses_options.items():
+            self.register(name, loss, gt_format, model_output_format)
+        pass
+
+    def register(self, name, loss, gt_format, model_output_format):
+
+        target_idx = loss['target']
+
+        loss_mode = loss['mode']
+        loss_fn = loss['loss']
+
+        target_format = loss['format']
+        origin_format = model_output_format[target_idx]
+
+        if target_idx is None:
+            # mixed loss
+            output_transform = lambda outputs: outputs
+        else:
+            # specified loss
+            output_transform = lambda outputs: convert_format(
+                outputs[target_idx], from_format=origin_format, to_format=target_format
+            )
+
+        gt_transform = lambda gt: convert_format(gt, from_format=gt_format, to_format=target_format)
+
+        item = {
+            'name': name,
+            'mode': loss_mode,
+            'loss_fn': loss_fn,
+            'target_idx': target_idx,
+            'target_format': target_format,
+            'origin_format': origin_format,
+            'output_transform': output_transform,
+            'gt_transform': gt_transform,
+        }
+
+        output_index = target_idx if target_idx is not None else -1
+        if self.losses_per_output.get(output_index, None) is None:
+            self.losses_per_output[output_index] = [item]
+        else:
+            self.losses_per_output[output_index].append(item)
+        pass
+
+        if loss_mode == 'gan':
+            self.all_gan_losses.append(item)
+
+    def losses(self):
+        return self.losses_per_output
+
+    def __repr__(self) -> str:
+        headers = ["#", "Name", "Mode", "Type", "Format"]
+        col_widths = [3, 12, 12, 15, 8]
+
+        separator = "-" * (sum(col_widths) + (len(col_widths) - 1) * 2)
+        header_line = "  ".join(f"{h:<{w}}" for h, w in zip(headers, col_widths))
+
+        lines = [separator, "Losses", separator, header_line, separator]
+
+        for output_index, losses in self.losses_per_output.items():
+            for loss in losses:
+                converting = f"{loss['origin_format']} -> {loss['target_format']}"
+                loss_type = loss['loss_fn'].__class__.__name__
+                line = "  ".join([
+                    f"{str(output_index):<{col_widths[0]}}",
+                    f"{loss['name']:<{col_widths[1]}}",
+                    f"{loss['mode']:<{col_widths[2]}}",
+                    f"{loss_type:<{col_widths[3]}}",
+                    f"{converting:<{col_widths[4]}}",
+                ])
+                lines.append(line)
+
+        lines.append(separator)
+
+        return "\n".join(lines)
+
+
+def convert_format(tensor: Tensor, from_format, to_format) -> Tensor:
+    if from_format == to_format:
+        return tensor
+    elif from_format == 'D' and to_format == 'B':
+        return decimal_to_binary((tensor * 255.))
+    elif from_format == 'B' and to_format == 'D':
+        return binary_to_decimal(tensor)
+    else:
+        raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
 
 
 def read_optimizer_options(train_opt, net_g, logger, is_discriminator=False):
