@@ -10,6 +10,13 @@ from basicsr.utils.logger import get_root_logger
 from basicsr.utils.module_util import lookup_optimizer
 
 
+def config_suffix(is_discriminator: bool) -> str:
+    return 'd' if is_discriminator else 'g'
+
+def frozen_model_parameters(net, frozen: bool):
+    for p in net.parameters():
+        p.requires_grad = (not frozen)
+
 def valid_model_output_settings(model_output_format, enabled_output_indexes):
     # outputs
     _supported_formats = ['B', 'D']
