@@ -18,6 +18,7 @@ from basicsr.utils.img_util import (
 )
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
+from .util_common import patch_forward
 from .util_config import (
     convert_format,
     MultipleLossOptions,
@@ -179,53 +180,6 @@ class KalmanSRModel(BaseModel):
                 pass
         return l_total
 
-    def forward_model(self):
-        """Forward model with partitioned lq data"""
-        # padding image and calculate partition parameters
-        img, col, row, mod_pad_h, mod_pad_w, split_h, split_w, shave_h, shave_w = calculate_and_padding_image(self.lq)
-
-        B, C, H, W = img.shape
-        scale = self.opt.get('scale', 1)
-
-        # list of partition borders
-        chopping_boxes = calculate_borders_for_chopping(
-            col, row, split_h, split_w, shave_h, shave_w
-        )
-
-        # list of patches / partitions
-        partitioned_img = []
-        for box in chopping_boxes:
-            h_range, w_range = box
-            partitioned_img.append(img[..., h_range, w_range])
-
-        del chopping_boxes
-
-        output_size = len(self.model_output_format)
-        prediction_patches = {k: [] for k in range(output_size)}
-
-        # image processing of each partition
-        for patch in partitioned_img:
-            raw_outputs = self.net_g(patch) if not hasattr(self, 'net_g_ema') else self.net_g_ema(patch)
-            assert hasattr(raw_outputs, '__len__'), "model output must be iterable"
-            assert len(raw_outputs) == output_size, "model image output size mismatched with settings"
-            for k in self.enabled_output_indexes:
-                patch = self._convert_format(
-                    raw_outputs[k], from_format=self.model_output_format[k], to_format='D'
-                )
-                prediction_patches[k].append(patch)
-                pass
-
-        predictions = dict()
-        for k in self.enabled_output_indexes:
-            predictions[k] = recover_from_patches_and_remove_paddings(
-                prediction_patches[k], col, row,
-                B, C, W, H, scale,
-                split_h, split_w, shave_h, shave_w,
-                mod_pad_h, mod_pad_w, scale
-            )
-
-        self.output_images = predictions
-
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
         if self.opt['rank'] == 0:
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
@@ -261,7 +215,13 @@ class KalmanSRModel(BaseModel):
             self.feed_data(val_data)
 
             with torch.no_grad():
-                self.forward_model()
+                self.output_images = patch_forward(
+                    network=self.net_g if not hasattr(self, 'net_g_ema') else self.net_g_ema,
+                    lq=self.lq,
+                    scale=self.opt.get('scale', 1),
+                    output_formats=self.model_output_format,
+                    output_indexes_enabled=self.enabled_output_indexes,
+                )
                 visuals = self.get_current_visuals()  # convert to ndarray
                 img_gt = visuals['gt']
                 img_sr = visuals['sr']
