@@ -117,6 +117,9 @@ class BaseModel():
         elif scheduler_type == 'CosineAnnealingRestartLR':
             for optimizer in self.optimizers:
                 self.schedulers.append(lr_scheduler.CosineAnnealingRestartLR(optimizer, **train_opt['scheduler']))
+        elif scheduler_type == 'ExponentialDecayWithCosineOscillationLR':
+            for optimizer in self.optimizers:
+                self.schedulers.append(lr_scheduler.ExponentialDecayWithCosineOscillationLR(optimizer, **train_opt['scheduler']))
         else:
             raise NotImplementedError(f'Scheduler {scheduler_type} is not implemented yet.')
 
