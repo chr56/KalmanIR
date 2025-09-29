@@ -156,10 +156,11 @@ class MambaRecursiveStateAdjustmentV4(nn.Module):
         self.norm_difficult_zone = LayerNorm2d(channel)
         self.norm_images = nn.ModuleList([LayerNorm2d(channel) for _ in range(length)])
 
-        self.conv_init = nn.Conv2d(channel, channel, kernel_size=3, padding='same')
+        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+        self.conv_init = nn.Conv2d(channel, channel, kernel_size=3, padding='same', groups=3)
         self.conv_images = nn.ModuleList(
             [
-                nn.Conv2d(channel, channel, kernel_size=3, padding='same')
+                ConvolutionalResBlockLayerNorm(channel, activation_type='relu')
                 for _ in range(length)
             ]
         )
@@ -177,8 +178,10 @@ class MambaRecursiveStateAdjustmentV4(nn.Module):
         return next_state, current_state
 
     def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        previous = self.norm_difficult_zone(difficult_zone)  # Initial value
-        current = previous / torch.exp(-self.conv_init(sigma))  # Initial value
+        # initial values
+        current = self.norm_difficult_zone(difficult_zone)
+        previous = current / torch.exp(-self.conv_init(sigma))
+        # recursive iterations
         for i in range(self.iteration):
             image = self.norm_images[i](image_sequence[:, i, ...])
             features = self.conv_images[i](image)
