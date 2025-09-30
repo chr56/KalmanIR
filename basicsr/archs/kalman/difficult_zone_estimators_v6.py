@@ -1,12 +1,14 @@
 import torch
 from torch import nn as nn
 
-from basicsr.archs.kalman.utils import mean_difference, cal_ae, cal_bce, cal_cs
+from basicsr.archs.kalman.utils import mean_difference, cal_ae, cal_bce, cal_cs, cal_kl
 
 
 def build_difficult_zone_estimator_for_v6(variant, dim: int, **kwargs) -> nn.Module:
     if variant == "original_v6":
         return DifficultZoneEstimatorV6(channel=dim)
+    elif variant == "multi_convolutional_v1":
+        return MultiConvolutionalV1(channel=dim, hidden_channels=dim // 3)
     else:
         if variant:
             import warnings
@@ -77,5 +79,52 @@ class DifficultZoneEstimatorV6(nn.Module):
         # ([B, C', H, W] -> [B, C, H, W]) * (1-r) + [B, C, H, W] * r
         difficult_zone = (self.estimator_main(all_difference) * (1 - self.residual_ratio) +
                           ae_difference * self.residual_ratio)
+
+        return difficult_zone
+
+
+class MultiConvolutionalV1(nn.Module):
+    def __init__(self, channel: int, hidden_channels: int):
+        super(MultiConvolutionalV1, self).__init__()
+
+        self.channel = channel
+
+        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+
+        self.conv_ae = ConvolutionalResBlockLayerNorm(channel, hidden_channels, activation_type='relu')
+        self.conv_kl = ConvolutionalResBlockLayerNorm(channel, hidden_channels, activation_type='relu')
+        self.conv_bce = ConvolutionalResBlockLayerNorm(channel, hidden_channels, activation_type='relu')
+
+        self.conv_cs = ConvolutionalResBlockLayerNorm(channels=1, out_channels=1, activation_type='relu')
+
+        self.channel_stacked = channel + 3 * hidden_channels + 1
+        self.conv_middle = ConvolutionalResBlockLayerNorm(self.channel_stacked, activation_type='silu')
+        self.conv_out = ConvolutionalResBlockLayerNorm(self.channel_stacked, channel, activation_type='silu')
+
+    def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        ##################################
+        ##### Calculate Difference #######
+        ##################################
+
+        ae_difference = mean_difference(cal_ae, b, a, c)  # [B, C, H, W]
+        kl_difference = mean_difference(cal_kl, b, a, c)  # [B, C, H, W]
+        bce_difference = mean_difference(cal_bce, b, a, c)  # [B, C, H, W]
+        cs_difference = mean_difference(cal_cs, b, a, c)  # [B, 1, H, W]
+
+        ##################################
+        #### Difficult Zone Estimation ###
+        ##################################
+
+        in_ae = self.conv_ae(ae_difference)
+        in_kl = self.conv_kl(kl_difference)
+        in_bce = self.conv_bce(bce_difference)
+        in_cs = self.conv_cs(cs_difference)
+
+        del ae_difference, bce_difference, cs_difference, kl_difference
+
+        all_difference = torch.cat((b, in_ae, in_kl, in_bce, in_cs), dim=1)  # [B, C', H, W]
+
+        middle = self.conv_middle(all_difference)
+        difficult_zone = self.conv_out(middle)
 
         return difficult_zone
