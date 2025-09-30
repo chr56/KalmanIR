@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
-from .difficult_zone_estimators import DifficultZoneEstimatorV6
+from .difficult_zone_estimators_v6 import build_difficult_zone_estimator_for_v6
 from .kalman_filter_flexible import FlexibleKalmanFilter
 from .kalman_gain_calulators_v6 import build_gain_calculator_for_v6
 from .kalman_predictors import build_predictor
@@ -21,6 +20,7 @@ class KalmanRefineNetV6(nn.Module):
             self,
             dim: int,
             img_seq: int = 3,
+            variant_difficult_zone_estimator: str = '',
             variant_uncertainty_estimation: str = '',
             variant_gain_calculation: str = '',
             variant_preditor: str = '',
@@ -28,7 +28,9 @@ class KalmanRefineNetV6(nn.Module):
     ):
         super(KalmanRefineNetV6, self).__init__()
 
-        self.difficult_zone_estimator = DifficultZoneEstimatorV6(dim)
+        self.difficult_zone_estimator = build_difficult_zone_estimator_for_v6(
+            variant=variant_difficult_zone_estimator, dim=dim, seq_length=img_seq
+        )
 
         self.uncertainty_estimator = build_uncertainty_estimator_for_v6(
             variant=variant_uncertainty_estimation, dim=dim, seq_length=img_seq

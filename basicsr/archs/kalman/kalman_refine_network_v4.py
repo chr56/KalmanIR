@@ -3,7 +3,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
-from .difficult_zone_estimators import DifficultZoneEstimatorV4
+from .difficult_zone_estimators_v4 import DifficultZoneEstimatorV4
 from .kalman_filter import KalmanFilter
 from .kalman_gain_calulators_v4 import build_gain_calculator_for_v4
 from .kalman_predictors import build_predictor

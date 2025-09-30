@@ -23,6 +23,7 @@ class KalmanIRV6(nn.Module):
 
     def __init__(self,
                  in_chans=3,
+                 variant_difficult_zone_estimator: str = '',
                  variant_uncertainty_estimation: str = '',
                  variant_gain_calculation: str = '',
                  variant_preditor: str = '',
@@ -40,6 +41,7 @@ class KalmanIRV6(nn.Module):
         self.kalman_refine = KalmanRefineNetV6(
             dim=out_chans,
             img_seq=3,
+            variant_difficult_zone_estimator=variant_difficult_zone_estimator,
             variant_uncertainty_estimation=variant_uncertainty_estimation,
             variant_gain_calculation=variant_gain_calculation,
             variant_preditor=variant_preditor,
