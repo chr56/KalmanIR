@@ -81,31 +81,66 @@ def _postprocess_yml_value(value):
     return value
 
 
-def parse_options(root_path, is_train=True):
+def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-opt', type=str, default='../options/train/train_MambaIR_SR_x2.yml', help='Path to option YAML file.')
-    parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none', help='job launcher')
-    parser.add_argument('--auto_resume', action='store_true')
-    parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--local-rank', type=int, default=0) # for pytorch 2.0
     parser.add_argument(
-        '--force_yml', nargs='+', default=None, help='Force to update yml files. Examples: train:ema_decay=0.999')
+        '-opt',
+        type=str, help='Path to option YAML file.')
+    parser.add_argument(
+        '--launcher',
+        choices=['none', 'pytorch', 'slurm'], default='none', help='job launcher')
+    parser.add_argument(
+        '--auto_resume',
+        action='store_true')
+    parser.add_argument(
+        '--debug',
+        action='store_true')
+    parser.add_argument(
+        '--local-rank',
+        type=int, default=0)  # for pytorch 2.0
+    parser.add_argument(
+        '--force_yml',
+        nargs='+', default=None, help='Force to update yml files. Examples: train:ema_decay=0.999')
     args = parser.parse_args()
+    return args
 
-    # parse yml to dict
-    with open(args.opt, mode='r') as f:
+
+def parse_options(root_path, is_train=True):
+    arguments = parse_arguments()
+    with open(arguments.opt, mode='r') as f:
+        # parse yml to dict
         opt = yaml.load(f, Loader=ordered_yaml()[0])
+    return process_options(
+        opt=opt,
+        launcher=arguments.launcher,
+        auto_resume=arguments.auto_resume,
+        debug=arguments.debug,
+        force_yml=arguments.force_yml,
+        root_path=root_path,
+        is_train=is_train,
+    ), arguments
+
+
+def process_options(
+        opt: OrderedDict,
+        launcher: str,
+        auto_resume: bool,
+        debug: bool,
+        force_yml: list,
+        root_path: str,
+        is_train=True,
+):
 
     # distributed settings
-    if args.launcher == 'none':
+    if launcher == 'none':
         opt['dist'] = False
         print('Disable distributed.', flush=True)
     else:
         opt['dist'] = True
-        if args.launcher == 'slurm' and 'dist_params' in opt:
-            init_dist(args.launcher, **opt['dist_params'])
+        if launcher == 'slurm' and 'dist_params' in opt:
+            init_dist(launcher, **opt['dist_params'])
         else:
-            init_dist(args.launcher)
+            init_dist(launcher)
     opt['rank'], opt['world_size'] = get_dist_info()
 
     # random seed
@@ -116,8 +151,8 @@ def parse_options(root_path, is_train=True):
     set_random_seed(seed + opt['rank'])
 
     # force to update yml options
-    if args.force_yml is not None:
-        for entry in args.force_yml:
+    if force_yml is not None:
+        for entry in force_yml:
             # now do not support creating new keys
             keys, value = entry.split('=')
             keys, value = keys.strip(), value.strip()
@@ -129,11 +164,11 @@ def parse_options(root_path, is_train=True):
             # using exec function
             exec(eval_str)
 
-    opt['auto_resume'] = args.auto_resume
+    opt['auto_resume'] = auto_resume
     opt['is_train'] = is_train
 
     # debug setting
-    if args.debug and not opt['name'].startswith('debug'):
+    if debug and not opt['name'].startswith('debug'):
         opt['name'] = 'debug_' + opt['name']
 
     if opt['num_gpu'] == 'auto':
@@ -176,7 +211,7 @@ def parse_options(root_path, is_train=True):
         opt['path']['log'] = results_root
         opt['path']['visualization'] = osp.join(results_root, 'visualization')
 
-    return opt, args
+    return opt
 
 
 @master_only
