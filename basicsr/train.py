@@ -1,17 +1,13 @@
 import datetime
 import sys
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
-
-# Add the parent directory to sys.path
-sys.path.append(parent_dir)
-
 import logging
 import math
 import time
 import torch
 from os import path as osp
+
+ROOT_PATH = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
+sys.path.append(ROOT_PATH)  # Add the parent directory to sys.path for `basicsr`
 
 from basicsr.data import build_dataloader, build_dataset
 from basicsr.data.data_sampler import EnlargedSampler
@@ -22,7 +18,7 @@ from basicsr.utils import (AvgTimer, MessageLogger, check_resume, get_env_info, 
 from basicsr.utils.options import copy_opt_file, dict2str, parse_options, parse_val_profiles
 
 
-def init_tb_loggers(opt):
+def init_tb_loggers(opt, tb_logger_root):
     # initialize wandb logger before tensorboard logger to allow proper sync
     if (opt['logger'].get('wandb') is not None) and (opt['logger']['wandb'].get('project')
                                                      is not None) and ('debug' not in opt['name']):
@@ -30,7 +26,7 @@ def init_tb_loggers(opt):
         init_wandb_logger(opt)
     tb_logger = None
     if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
-        tb_logger = init_tb_logger(log_dir=osp.join(opt['root_path'], 'tb_logger', opt['name']))
+        tb_logger = init_tb_logger(log_dir=osp.join(tb_logger_root, opt['name']))
     return tb_logger
 
 
@@ -96,10 +92,15 @@ def load_resume_state(opt):
     return resume_state
 
 
-def train_pipeline(root_path):
+def train_from_option_file(root_path):
     # parse options, set distributed setting, set ramdom seed
     opt, args = parse_options(root_path, is_train=True)
     opt['root_path'] = root_path
+
+    train_pipeline(opt, opt_path=args.opt, root_path=root_path)
+
+
+def train_pipeline(opt, opt_path: str, root_path: str):
 
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
@@ -110,10 +111,10 @@ def train_pipeline(root_path):
     if resume_state is None and opt['rank'] == 0:
         make_exp_dirs(opt)
         if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name'] and opt['rank'] == 0:
-            mkdir_and_rename(osp.join(opt['root_path'], 'tb_logger', opt['name']))
+            mkdir_and_rename(osp.join(root_path, 'tb_logger', opt['name']))
 
     # copy the yml file to the experiment root
-    copy_opt_file(args.opt, opt['path']['experiments_root'])
+    copy_opt_file(opt_path, opt['path']['experiments_root'])
 
     # WARNING: should not use get_root_logger in the above codes, including the called functions
     # Otherwise the logger will not be properly initialized
@@ -122,7 +123,7 @@ def train_pipeline(root_path):
     logger.info(get_env_info())
     logger.info(dict2str(opt))
     # initialize wandb and tb loggers
-    tb_logger = init_tb_loggers(opt)
+    tb_logger = init_tb_loggers(opt, tb_logger_root=osp.join(root_path, 'tb_logger'))
     # create train and validation dataloaders
     result = create_train_val_dataloader(opt, logger)
     train_loader, train_sampler, val_loaders, total_epochs, total_iters = result
@@ -252,5 +253,4 @@ def calculate_eta(current, total, start_time):
 
 
 if __name__ == '__main__':
-    root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
-    train_pipeline(root_path)
+    train_from_option_file(ROOT_PATH)

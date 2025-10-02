@@ -1,22 +1,25 @@
+import sys
 import logging
 import torch
 from os import path as osp
-import sys
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
 
-# Add the parent directory to sys.path
-sys.path.append(parent_dir)
+ROOT_PATH = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
+sys.path.append(ROOT_PATH)  # Add the parent directory to sys.path for `basicsr`
+
 from basicsr.data import build_dataloader, build_dataset
 from basicsr.models import build_model
 from basicsr.utils import get_root_logger, get_time_str, make_exp_dirs
 from basicsr.utils.options import dict2str, parse_options
 
 
-def test_pipeline(root_path):
+def test_from_option_file(root_path):
     # parse options, set distributed setting, set ramdom seed
     opt, _ = parse_options(root_path, is_train=False)
+
+    test_pipeline(opt)
+
+
+def test_pipeline(opt):
 
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
@@ -46,5 +49,4 @@ def test_pipeline(root_path):
 
 
 if __name__ == '__main__':
-    root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
-    test_pipeline(root_path)
+    test_from_option_file(ROOT_PATH)
