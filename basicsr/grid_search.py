@@ -81,10 +81,17 @@ def train_from_template(root_path: str):
             root_path=root_path,
             is_train=True,
         )
-        train_pipeline(actual_opt, opt_path=template_path, root_path=root_path)
-        print("================================")
-        print(f"Finished training option {i + 1}!")
-        print("================================")
+        try:
+            train_pipeline(actual_opt, opt_path=template_path, root_path=root_path)
+            print("================================")
+            print(f"Training option {i + 1} Completed!")
+            print("================================")
+        except Exception:
+            print("================================")
+            print(f"Failed to train option {i + 1}!")
+            import traceback
+            traceback.print_exc()
+            print("================================")
 
 
 if __name__ == '__main__':
