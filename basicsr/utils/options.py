@@ -1,4 +1,5 @@
 import argparse
+import os
 import random
 from typing import List, Optional
 
@@ -229,6 +230,18 @@ def copy_opt_file(opt_file, experiments_root):
         lines.insert(0, f'# GENERATE TIME: {time.asctime()}\n# CMD:\n# {cmd}\n\n')
         f.seek(0)
         f.writelines(lines)
+
+
+@master_only
+def dump_option(opt: dict, path=None):
+    try:
+        path = path or osp.join(opt['path']['experiments_root'], opt['name']) + '.yml'
+        os.makedirs(osp.dirname(path), exist_ok=True)
+        with open(path, mode='w') as f:
+            yaml.dump(opt, f, Dumper=ordered_yaml()[1])
+    except Exception as e:
+        print(f'Failed to dump option, {e}!')
+        pass
 
 
 class ValidationProfile:

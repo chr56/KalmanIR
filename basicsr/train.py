@@ -15,7 +15,7 @@ from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
 from basicsr.models import build_model
 from basicsr.utils import (AvgTimer, MessageLogger, check_resume, get_env_info, get_root_logger, get_time_str,
                            init_tb_logger, init_wandb_logger, make_exp_dirs, mkdir_and_rename, scandir)
-from basicsr.utils.options import copy_opt_file, dict2str, parse_options, parse_val_profiles
+from basicsr.utils.options import copy_opt_file, dump_option, dict2str, parse_options, parse_val_profiles
 
 
 def init_tb_loggers(opt, tb_logger_root):
@@ -100,7 +100,7 @@ def train_from_option_file(root_path):
     train_pipeline(opt, opt_path=args.opt, root_path=root_path)
 
 
-def train_pipeline(opt, opt_path: str, root_path: str):
+def train_pipeline(opt, opt_path: str, root_path: str, dump_real_option: bool = False):
 
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
@@ -115,6 +115,8 @@ def train_pipeline(opt, opt_path: str, root_path: str):
 
     # copy the yml file to the experiment root
     copy_opt_file(opt_path, opt['path']['experiments_root'])
+    if dump_real_option:
+        dump_option(opt)
 
     # WARNING: should not use get_root_logger in the above codes, including the called functions
     # Otherwise the logger will not be properly initialized

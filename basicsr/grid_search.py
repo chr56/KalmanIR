@@ -82,7 +82,7 @@ def train_from_template(root_path: str):
             is_train=True,
         )
         try:
-            train_pipeline(actual_opt, opt_path=template_path, root_path=root_path)
+            train_pipeline(actual_opt, opt_path=template_path, root_path=root_path, dump_real_option=True)
             print("================================")
             print(f"Training option {i + 1} Completed!")
             print("================================")
