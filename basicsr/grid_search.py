@@ -1,6 +1,7 @@
 import sys
 from collections import OrderedDict
 from os import path as osp
+from time import sleep
 from typing import List
 
 import yaml
@@ -92,6 +93,7 @@ def train_from_template(root_path: str):
             import traceback
             traceback.print_exc()
             print("================================")
+            sleep(8)
 
 
 if __name__ == '__main__':
