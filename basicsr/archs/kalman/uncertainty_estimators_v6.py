@@ -4,7 +4,9 @@ from torch.nn import functional as F
 
 
 def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int) -> nn.Module:
-    if variant == "mamba_recursive_state_adjustment_v1":
+    if variant == "skipped":
+        return DummyUncertaintyEstimator()
+    elif variant == "mamba_recursive_state_adjustment_v1":
         return MambaRecursiveStateAdjustmentV1(seq_length, dim)
     elif variant == "mamba_recursive_state_adjustment_v2":
         return MambaRecursiveStateAdjustmentV2(seq_length, dim)
@@ -351,3 +353,8 @@ class RecursiveConvolutionalV3(nn.Module):
         uncertainty = F.sigmoid(uncertainty)
 
         return uncertainty
+
+
+class DummyUncertaintyEstimator(nn.Module):
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        return difficult_zone
