@@ -7,6 +7,9 @@ from basicsr.archs.kalman.utils import mean_difference, cal_ae, cal_bce, cal_cs,
 def build_difficult_zone_estimator_for_v6(variant, dim: int, **kwargs) -> nn.Module:
     if variant == "original_v6":
         return DifficultZoneEstimatorV6(channel=dim)
+    elif variant == "deep_convolutional_v1":
+        merge_ratio = kwargs.get('variant_difficult_zone_merge_ratio', 0.5)
+        return DeepConvolutionalV1(channel=dim, merge_ratio=merge_ratio)
     elif variant == "multi_convolutional_v1":
         return MultiConvolutionalV1(channel=dim, hidden_channels=dim // 3)
     else:
@@ -127,4 +130,77 @@ class MultiConvolutionalV1(nn.Module):
         middle = self.conv_middle(all_difference)
         difficult_zone = self.conv_out(middle)
 
+        return difficult_zone
+
+
+class DeepConvolutionalV1(nn.Module):
+    def __init__(
+            self,
+            channel: int,
+            merge_ratio: float,
+            norm_affine: bool = True,
+    ):
+        super(DeepConvolutionalV1, self).__init__()
+
+        self.channel = channel
+
+        self.merge_ratio = merge_ratio
+        self.keep_ratio = 1 - self.merge_ratio
+
+        from .utils import LayerNorm2d
+        self.layer_norm_ae = LayerNorm2d(channel, elementwise_affine=norm_affine)
+        # self.layer_norm_kl = LayerNorm2d(channel, elementwise_affine=norm_affine)
+        self.layer_norm_bce = LayerNorm2d(channel, elementwise_affine=norm_affine)
+        self.layer_norm_cs = LayerNorm2d(1, elementwise_affine=norm_affine)
+
+        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+        self.channel_stacked = 3 * channel + 1
+        self.block1 = ConvolutionalResBlockLayerNorm(
+            channels=self.channel_stacked, out_channels=channel, activation_type='leaky_relu',
+        )
+        self.block2 = ConvolutionalResBlockLayerNorm(
+            channels=channel, out_channels=channel, activation_type='silu',
+        )
+
+    def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        :param a: shape [B, C, H, W]
+        :param b: shape [B, C, H, W]
+        :param c: shape [B, C, H, W]
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        ##################################
+        ##### Calculate Difference #######
+        ##################################
+
+        ae_difference = self.layer_norm_ae(
+            mean_difference(cal_ae, b, a, c)
+        )  # [B, C, H, W]
+        # kl_difference = self.layer_norm_kl(
+        #     mean_difference(cal_kl, b, a, c)
+        # )  # [B, C, H, W]
+        bce_difference = self.layer_norm_bce(
+            mean_difference(cal_bce, b, a, c)
+        )  # [B, C, H, W]
+        cs_difference = self.layer_norm_cs(
+            mean_difference(cal_cs, b, a, c)
+        )  # [B, 1, H, W]
+
+        all_difference = torch.cat((b, cs_difference, ae_difference, bce_difference), dim=1)  # [B, C', H, W]
+
+        ##################################
+        #### Difficult Zone Estimation ###
+        ##################################
+
+        # [B, C', H, W] -> [B, C, H, W] * ratio
+        x = all_difference
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.merge_ratio * x
+
+        # [B, C, H, W] * (1 - ratio)
+        y = self.keep_ratio * ae_difference
+
+        difficult_zone = x + y
         return difficult_zone
