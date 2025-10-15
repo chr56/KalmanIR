@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int) -> nn.Module:
+def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwargs) -> nn.Module:
     if variant == "skipped":
         return DummyUncertaintyEstimator()
     elif variant == "mamba_recursive_state_adjustment_v1":

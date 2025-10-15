@@ -46,6 +46,7 @@ class KalmanIRV6(nn.Module):
             variant_gain_calculation=variant_gain_calculation,
             variant_preditor=variant_preditor,
             with_difficult_zone_affine=with_difficult_zone_affine,
+            **kwargs,
         )
 
         self.apply(init_weights)

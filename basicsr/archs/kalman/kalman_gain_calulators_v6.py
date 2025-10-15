@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 
-def build_gain_calculator_for_v6(variant, dim: int, seq_length: int) -> nn.Module:
+def build_gain_calculator_for_v6(variant, dim: int, seq_length: int, **kwargs) -> nn.Module:
     if variant == "linear_convolutional_multiple_channels":
         return LinearConvolutionalMultipleChannels(channel=dim, seq_length=seq_length)
     elif variant == "simple_convolutional_multiple_channels":

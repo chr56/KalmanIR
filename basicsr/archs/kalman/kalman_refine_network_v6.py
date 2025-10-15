@@ -25,19 +25,20 @@ class KalmanRefineNetV6(nn.Module):
             variant_gain_calculation: str = '',
             variant_preditor: str = '',
             with_difficult_zone_affine: bool = False,
+            **kwargs,
     ):
         super(KalmanRefineNetV6, self).__init__()
 
         self.difficult_zone_estimator = build_difficult_zone_estimator_for_v6(
-            variant=variant_difficult_zone_estimator, dim=dim, seq_length=img_seq
+            variant=variant_difficult_zone_estimator, dim=dim, seq_length=img_seq, **kwargs,
         )
 
         self.uncertainty_estimator = build_uncertainty_estimator_for_v6(
-            variant=variant_uncertainty_estimation, dim=dim, seq_length=img_seq
+            variant=variant_uncertainty_estimation, dim=dim, seq_length=img_seq, **kwargs
         )
 
         self.kalman_gain_calculator = build_gain_calculator_for_v6(
-            variant=variant_gain_calculation, dim=dim, seq_length=img_seq
+            variant=variant_gain_calculation, dim=dim, seq_length=img_seq, **kwargs
         )
 
         self.kalman_preditor = build_predictor(variant_preditor, dim=dim, seq_length=img_seq)
