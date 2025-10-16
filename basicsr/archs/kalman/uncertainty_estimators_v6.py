@@ -17,6 +17,10 @@ def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwa
         return MambaRecursiveStateAdjustmentV4(seq_length, dim)
     elif variant == "mamba_recursive_state_adjustment_v5":
         return MambaRecursiveStateAdjustmentV5(seq_length, dim)
+    elif variant == "mamba_recursive_state_adjustment_v6":
+        return MambaRecursiveStateAdjustmentV6(seq_length, dim)
+    elif variant == "mamba_recursive_state_adjustment_v6x":
+        return MambaRecursiveStateAdjustmentV6X(seq_length, dim)
     elif variant == "recursive_convolutional_v1":
         return RecursiveConvolutionalV1(seq_length, dim)
     elif variant == "recursive_convolutional_v2":
@@ -250,6 +254,96 @@ class MambaRecursiveStateAdjustmentV5(nn.Module):
             )
         uncertainty = self.state_to_uncertainty(current)
         return uncertainty
+
+
+class MambaRecursiveStateAdjustmentV6(nn.Module):
+    def __init__(self, length: int, channel: int, **kwargs):
+        super(MambaRecursiveStateAdjustmentV6, self).__init__()
+        self.channel = channel
+        self.iteration = length
+
+        from .utils import cal_kl, LayerNorm2d
+        self.cal_kl = cal_kl
+        self.norm_difficult_zone = LayerNorm2d(channel)
+
+        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        self.conv_init_sigma = nn.Conv2d(channel, channel, kernel_size=3, padding='same')
+        self.conv_images = nn.ModuleList(
+            [
+                ConvolutionalResBlockGroupNorm(channel, norm_group=3, activation_type='leaky_relu')
+                for _ in range(length)
+            ]
+        )
+
+        from basicsr.archs.modules_mamba import SS2DChanelFirst
+        self.mamba_sigma_state = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_sigma_image = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias_final = SS2DChanelFirst(d_model=channel, **kwargs)
+
+    def _forward_one_step(self, current_state, previous_state, image_features):
+        sigma_state = self.mamba_sigma_state(self.cal_kl(current_state, previous_state))
+        sigma_image = self.mamba_sigma_image(image_features)
+        next_state = current_state / torch.exp(-sigma_state - sigma_image)
+        return next_state, current_state
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        previous = self.norm_difficult_zone(difficult_zone)  # Initial value
+        current = previous / torch.exp(-self.conv_init_sigma(sigma.detach()))  # Initial value
+        for i in range(self.iteration):
+            image_features = self.conv_images[i](image_sequence[:, i, ...])
+            current, previous = self._forward_one_step(
+                current_state=current,
+                previous_state=previous,
+                image_features=image_features,
+            )
+        current = current + self.mamba_bias_final(difficult_zone)
+        return current
+
+
+class MambaRecursiveStateAdjustmentV6X(nn.Module):
+    def __init__(self, length: int, channel: int, **kwargs):
+        super(MambaRecursiveStateAdjustmentV6X, self).__init__()
+        self.channel = channel
+        self.iteration = length
+
+        from .utils import cal_kl
+        self.cal_kl = cal_kl
+
+        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        self.conv_init_sigma = ConvolutionalResBlockGroupNorm(channel, norm_group=3, activation_type='leaky_relu')
+        self.conv_images = nn.ModuleList(
+            [
+                ConvolutionalResBlockGroupNorm(channel, norm_group=3, activation_type='leaky_relu')
+                for _ in range(length)
+            ]
+        )
+
+        from basicsr.archs.modules_mamba import SS2DChanelFirst
+        self.mamba_sigma_state = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_sigma_image = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias_final = SS2DChanelFirst(d_model=channel, **kwargs)
+
+    def _forward_one_step(self, current_state, previous_state, image_features):
+        sigma_state = self.mamba_sigma_state(self.cal_kl(current_state, previous_state))
+        sigma_image = self.mamba_sigma_image(image_features)
+        next_state = current_state / torch.exp(-sigma_state - sigma_image)
+        return next_state, current_state
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        # Initial values
+        init_sigma = F.sigmoid(self.conv_init_sigma(sigma.detach())) - 0.5
+        previous = difficult_zone
+        current = previous / torch.exp(-init_sigma)
+        # Iterative Refinement
+        for i in range(self.iteration):
+            image_features = self.conv_images[i](image_sequence[:, i, ...])
+            current, previous = self._forward_one_step(
+                current_state=current,
+                previous_state=previous,
+                image_features=image_features,
+            )
+        current = current + self.mamba_bias_final(difficult_zone)
+        return current
 
 
 class SimpleRecursiveConvolutionalV1(nn.Module):
