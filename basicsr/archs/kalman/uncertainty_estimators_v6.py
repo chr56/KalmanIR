@@ -4,6 +4,7 @@ from torch.nn import functional as F
 
 
 def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwargs) -> nn.Module:
+    update_ratio = kwargs.get('variant_uncertainty_update_ratio', 0.5)
     if variant == "skipped":
         return DummyUncertaintyEstimator()
     elif variant == "mamba_recursive_state_adjustment_v1":
@@ -22,6 +23,8 @@ def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwa
         return RecursiveConvolutionalV2(seq_length, dim)
     elif variant == "recursive_convolutional_v3":
         return RecursiveConvolutionalV3(seq_length, dim)
+    elif variant == "simple_recursive_convolutional_v1":
+        return SimpleRecursiveConvolutionalV1(seq_length, dim, update_ratio)
     else:
         raise ValueError(f"Unsupported variant: {variant}")
 
@@ -247,6 +250,40 @@ class MambaRecursiveStateAdjustmentV5(nn.Module):
             )
         uncertainty = self.state_to_uncertainty(current)
         return uncertainty
+
+
+class SimpleRecursiveConvolutionalV1(nn.Module):
+    def __init__(self, length: int, channel: int, difficult_zone_update_ratio: float):
+        super(SimpleRecursiveConvolutionalV1, self).__init__()
+        self.iteration = length
+        self.channel = channel
+
+        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+
+        self.block1 = ConvolutionalResBlockLayerNorm(
+            2 * channel, channel, activation_type='leaky_relu'
+        )
+        self.block2 = ConvolutionalResBlockLayerNorm(
+            channel, channel, activation_type='sigmoid'
+        )
+
+        self.out_linear = nn.Conv2d(channel, channel, kernel_size=1)
+
+        self.update_ratio = difficult_zone_update_ratio
+        self.remain_ratio = 1.0 - difficult_zone_update_ratio
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        s = difficult_zone
+        for i in range(self.iteration):
+            image = image_sequence[:, i, ...]
+            s = torch.cat((s, image), dim=1)
+            s = self.block1(s)
+            s = self.block2(s)
+
+        uncertainty = s * self.update_ratio + difficult_zone * self.remain_ratio
+        uncertainty = self.out_linear(uncertainty)
+        return uncertainty
+
 
 class RecursiveConvolutionalV1(nn.Module):
     def __init__(self, length: int, channel: int, **kwargs):
