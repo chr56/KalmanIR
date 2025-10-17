@@ -5,6 +5,8 @@ from torch import nn as nn
 def build_predictor(mode, dim, seq_length) -> nn.Module:
     if mode == "convolutional":
         return KalmanPredictorV0(dim=dim)
+    elif mode == "deep_convolutional_v1":
+        return KalmanPredictorDeepConvolutionalV1(dim=dim)
     elif mode == "mamba_adjustment":
         return KalmanPredictorMambaAdjustment(dim=dim)
     elif mode == "mamba_latent_adjustment":
@@ -28,6 +30,21 @@ class KalmanPredictorV0(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.block(x)
+
+
+class KalmanPredictorDeepConvolutionalV1(nn.Module):
+    def __init__(self, dim: int):
+        super(KalmanPredictorDeepConvolutionalV1, self).__init__()
+        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        self.in_proj = nn.Conv2d(dim, dim, kernel_size=1, padding='same', stride=1)
+        self.block1 = ConvolutionalResBlockGroupNorm(dim, 3, activation_type='leaky_relu')
+        self.block2 = ConvolutionalResBlockGroupNorm(dim, 3, activation_type='silu')
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.in_proj(x)
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
 
 
 class KalmanPredictorMambaAdjustment(nn.Module):
