@@ -139,3 +139,12 @@ def sizeof_fmt(size, suffix='B'):
             return f'{size:3.1f} {unit}{suffix}'
         size /= 1024.0
     return f'{size:3.1f} Y{suffix}'
+
+def check_value(tensor: torch.Tensor, name: str = ''):
+    nan_count = tensor.isnan().sum().item()
+    if nan_count > 0:
+        print(f"`{name}` contains {nan_count} NaN values!")
+
+    inf_count = tensor.isinf().sum().item()
+    if inf_count > 0:
+        print(f"`{name}` contains {inf_count} Inf values!")
