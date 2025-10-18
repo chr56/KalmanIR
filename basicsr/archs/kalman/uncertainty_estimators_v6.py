@@ -11,6 +11,8 @@ def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwa
         return MambaRecursiveStateAdjustmentV1(seq_length, dim)
     elif variant == "mamba_recursive_state_adjustment_v2":
         return MambaRecursiveStateAdjustmentV2(seq_length, dim)
+    elif variant == "mamba_recursive_state_adjustment_v2l":
+        return MambaRecursiveStateAdjustmentV2Lite(seq_length, dim)
     elif variant == "mamba_recursive_state_adjustment_v3":
         return MambaRecursiveStateAdjustmentV3(seq_length, dim)
     elif variant == "mamba_recursive_state_adjustment_v4":
@@ -102,6 +104,56 @@ class MambaRecursiveStateAdjustmentV2(nn.Module):
                 current_state=current,
                 previous_state=previous,
                 image=image,
+            )
+        return current
+
+
+class MambaRecursiveStateAdjustmentV2Lite(nn.Module):
+    def __init__(self, length: int, channel: int, **kwargs):
+        super(MambaRecursiveStateAdjustmentV2Lite, self).__init__()
+        self.channel = channel
+        self.iteration = length
+
+        from .utils import cal_kl, LayerNorm2d
+        self.cal_kl = cal_kl
+        self.norm_difficult_zone = LayerNorm2d(channel)
+        self.norm_image = LayerNorm2d(channel)
+
+        from .convolutional_res_block import ResidualConvBlock
+        self.conv_init = nn.Conv2d(channel, channel, kernel_size=3, padding='same')
+        self.conv_image = ResidualConvBlock(
+            channel, channel, num_layers=2,
+            norm_type='group', norm_group=3, activation_type='leaky_relu',
+        )
+        self.conv_merge = ResidualConvBlock(
+            2 * channel, channel, num_layers=3,
+            norm_type='group', norm_group=6, activation_type='sigmoid',
+        )
+
+        from basicsr.archs.modules_mamba import SS2DChanelFirst
+        self.mamba_sigma = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias = SS2DChanelFirst(d_model=channel, **kwargs)
+
+    def _forward_one_step(self, current_state, previous_state, image_features):
+        kl = self.cal_kl(current_state, previous_state)
+        features = self.conv_merge(torch.cat((kl, image_features), dim=1))
+        sigma = self.mamba_sigma(features)
+        bias = self.mamba_bias(features)
+        next_state = (current_state / torch.exp(-sigma)) + bias
+        return next_state, current_state
+
+    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
+        # Initial values
+        previous = self.norm_difficult_zone(difficult_zone)
+        current = previous / torch.exp(-self.conv_init(sigma))
+        # Recursive estimation
+        for i in range(self.iteration):
+            image = image_sequence[:, i, ...]
+            image_features = self.conv_image(image)
+            current, previous = self._forward_one_step(
+                current_state=current,
+                previous_state=previous,
+                image_features=image_features,
             )
         return current
 
