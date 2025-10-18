@@ -7,6 +7,8 @@ def build_predictor(mode, dim, seq_length) -> nn.Module:
         return KalmanPredictorV0(dim=dim)
     elif mode == "deep_convolutional_v1":
         return KalmanPredictorDeepConvolutionalV1(dim=dim)
+    elif mode == "deep_convolutional_v2":
+        return KalmanPredictorDeepConvolutionalV2(dim=dim)
     elif mode == "mamba_adjustment":
         return KalmanPredictorMambaAdjustment(dim=dim)
     elif mode == "mamba_latent_adjustment":
@@ -42,6 +44,25 @@ class KalmanPredictorDeepConvolutionalV1(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.in_proj(x)
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+
+class KalmanPredictorDeepConvolutionalV2(nn.Module):
+    def __init__(self, dim: int):
+        super(KalmanPredictorDeepConvolutionalV2, self).__init__()
+        from .convolutional_res_block import ResidualConvBlock
+        self.block1 = ResidualConvBlock(
+            dim, dim, num_layers=1,
+            norm_type='group', norm_group=3, activation_type='silu',
+        )
+        self.block2 = ResidualConvBlock(
+            dim, dim, num_layers=3,
+            norm_type='group', norm_group=3, activation_type='sigmoid',
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.block1(x)
         x = self.block2(x)
         return x
