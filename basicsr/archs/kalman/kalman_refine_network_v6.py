@@ -2,11 +2,7 @@ import torch
 import torch.nn as nn
 
 from basicsr.archs.arch_util import init_weights
-from .difficult_zone_estimators_v6 import build_difficult_zone_estimator_for_v6
 from .kalman_filter_flexible import FlexibleKalmanFilter
-from .kalman_gain_calulators_v6 import build_gain_calculator_for_v6
-from .kalman_predictors import build_predictor
-from .uncertainty_estimators_v6 import build_uncertainty_estimator_for_v6
 
 
 class KalmanRefineNetV6(nn.Module):
@@ -29,18 +25,22 @@ class KalmanRefineNetV6(nn.Module):
     ):
         super(KalmanRefineNetV6, self).__init__()
 
-        self.difficult_zone_estimator = build_difficult_zone_estimator_for_v6(
+        from .difficult_zone import build_difficult_zone_estimator
+        self.difficult_zone_estimator = build_difficult_zone_estimator(
             variant=variant_difficult_zone_estimator, dim=dim, seq_length=img_seq, **kwargs,
         )
 
-        self.uncertainty_estimator = build_uncertainty_estimator_for_v6(
+        from .uncertainty import build_uncertainty_estimator
+        self.uncertainty_estimator = build_uncertainty_estimator(
             variant=variant_uncertainty_estimation, dim=dim, seq_length=img_seq, **kwargs
         )
 
-        self.kalman_gain_calculator = build_gain_calculator_for_v6(
+        from .kalman_gain import build_gain_calculator
+        self.kalman_gain_calculator = build_gain_calculator(
             variant=variant_gain_calculation, dim=dim, seq_length=img_seq, **kwargs
         )
 
+        from .predictor import build_predictor
         self.kalman_preditor = build_predictor(variant_preditor, dim=dim, seq_length=img_seq)
 
         self.kalman_filter = FlexibleKalmanFilter()

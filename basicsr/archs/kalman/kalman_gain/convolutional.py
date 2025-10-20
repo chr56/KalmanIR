@@ -1,44 +1,5 @@
 import torch
-from torch import nn
-
-
-def build_gain_calculator_for_v6(variant, dim: int, seq_length: int, **kwargs) -> nn.Module:
-    uncertainty_update_ratio = kwargs.get('variant_gain_calculation_uncertainty_update_ratio', 0.5)
-    if variant == "linear_convolutional_multiple_channels":
-        return LinearConvolutionalMultipleChannels(channel=dim, seq_length=seq_length)
-    elif variant == "simple_convolutional_multiple_channels":
-        return SimpleConvolutionalMultipleChannels(channel=dim, seq_length=seq_length)
-    elif variant == "deep_convolutional_multiple_channels_v1":
-        return DeepConvolutionalMultipleChannelsV1(channel=dim, seq_length=seq_length,
-                                                   uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v2":
-        return DeepConvolutionalMultipleChannelsV2(channel=dim, seq_length=seq_length,
-                                                   uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v3a":
-        return DeepConvolutionalMultipleChannelsV3a(channel=dim, seq_length=seq_length,
-                                                    uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v3b":
-        return DeepConvolutionalMultipleChannelsV3b(channel=dim, seq_length=seq_length,
-                                                    uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v3c":
-        return DeepConvolutionalMultipleChannelsV3c(channel=dim, seq_length=seq_length,
-                                                    uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v4":
-        return DeepConvolutionalMultipleChannelsV4(channel=dim, seq_length=seq_length,
-                                                   uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v5":
-        return DeepConvolutionalMultipleChannelsV5(channel=dim, seq_length=seq_length,
-                                                   uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "deep_convolutional_multiple_channels_v5e":
-        return DeepConvolutionalMultipleChannelsV5e(channel=dim, seq_length=seq_length,
-                                                    uncertainty_update_ratio=uncertainty_update_ratio)
-    elif variant == "complex_convolutional_multiple_channels":
-        return ComplexConvolutionalMultipleChannels(channel=dim, seq_length=seq_length)
-    else:
-        if variant:
-            import warnings
-            warnings.warn(f"Unknown gain calculator variant `{variant}`, use default instead!")
-        return SimpleConvolutionalMultipleChannels(channel=dim, seq_length=seq_length)
+from torch import nn as nn
 
 
 class DeepConvolutionalMultipleChannelsV1(nn.Module):
@@ -47,7 +8,7 @@ class DeepConvolutionalMultipleChannelsV1(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
 
         self.block1 = ConvolutionalResBlockGroupNorm(
             channels=channel * 2, out_channels=channel, norm_group=6, activation_type='leaky_relu', kernel_size=3,
@@ -89,7 +50,7 @@ class DeepConvolutionalMultipleChannelsV2(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.block1 = ConvolutionalResBlockGroupNorm(
             channels=channel * 2, out_channels=channel, norm_group=6, activation_type='leaky_relu', kernel_size=3,
         )
@@ -127,7 +88,7 @@ class DeepConvolutionalMultipleChannelsV3a(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
 
         self.image_block = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='sigmoid'
@@ -167,7 +128,7 @@ class DeepConvolutionalMultipleChannelsV3b(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
 
         self.image_block1 = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='leaky_relu'
@@ -207,7 +168,7 @@ class DeepConvolutionalMultipleChannelsV3c(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
 
         self.image_block = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='leaky_relu'
@@ -246,7 +207,7 @@ class DeepConvolutionalMultipleChannelsV4(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.image_blocks = nn.ModuleList(
             [
                 ConvolutionalResBlockGroupNorm(
@@ -284,7 +245,7 @@ class DeepConvolutionalMultipleChannelsV5(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.image_input_block = ConvolutionalResBlockGroupNorm(
             channels=channel, norm_group=3, activation_type='leaky_relu'
         )
@@ -326,7 +287,7 @@ class DeepConvolutionalMultipleChannelsV5e(nn.Module):
         self.channel = channel
         self.seq_length = seq_length
 
-        from .convolutional_res_block import ResidualConvBlock
+        from ..convolutional_res_block import ResidualConvBlock
         self.image_input_block = ResidualConvBlock(
             channel, norm_type='group', norm_group=3, activation_type='leaky_relu'
         )
@@ -360,106 +321,6 @@ class DeepConvolutionalMultipleChannelsV5e(nn.Module):
             image_features = self.image_input_block(image_sequence[:, i, ...])
             image_features = self.image_features_blocks[i](image_features)
             gain = self._forward_one_step(uncertainty, image_features)
-            kalman_gains.append(gain)
-        kalman_gains = torch.stack(kalman_gains, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
-        return kalman_gains
-
-
-class LinearConvolutionalMultipleChannels(nn.Module):
-    def __init__(self, channel: int, seq_length: int):
-        super(LinearConvolutionalMultipleChannels, self).__init__()
-        self.channel = channel
-        self.seq_length = seq_length
-
-        self.merger = nn.Sequential(
-            nn.GroupNorm(2, 2 * channel, eps=1e-6),
-            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-            nn.Sigmoid(),
-        )
-        self.residual_rate = 0.4
-
-    def forward(self, uncertainty: torch.Tensor, image_sequence: torch.Tensor) -> torch.Tensor:
-        kalman_gains = []
-        for i in range(self.seq_length):
-            image = image_sequence[:, i, ...]
-            gain = self.merger(torch.cat((uncertainty, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
-            gain = self.residual_rate * uncertainty + (1 - self.residual_rate) * gain
-            kalman_gains.append(gain)
-        kalman_gains = torch.stack(kalman_gains, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
-        return kalman_gains
-
-
-class SimpleConvolutionalMultipleChannels(nn.Module):
-    def __init__(self, channel: int, seq_length: int):
-        super(SimpleConvolutionalMultipleChannels, self).__init__()
-        self.channel = channel
-        self.seq_length = seq_length
-
-        self.merger = nn.Sequential(
-            nn.GroupNorm(2, 2 * channel, eps=1e-6),
-            nn.Conv2d(2 * channel, 2 * channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(2 * channel, channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            nn.GroupNorm(1, channel, eps=1e-6),
-            nn.Conv2d(channel, channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-        )
-        self.residual_rate = 0.4
-
-    def forward(self, uncertainty: torch.Tensor, image_sequence: torch.Tensor) -> torch.Tensor:
-        kalman_gains = []
-        for i in range(self.seq_length):
-            image = image_sequence[:, i, ...]
-            gain = self.merger(torch.cat((uncertainty, image), dim=1))  # [B, 2C, H, W] -> [B, C, H, W]
-            gain = self.residual_rate * uncertainty + (1 - self.residual_rate) * gain
-            kalman_gains.append(gain)
-        kalman_gains = torch.stack(kalman_gains, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
-        return kalman_gains
-
-
-class ComplexConvolutionalMultipleChannels(nn.Module):
-    def __init__(self, channel: int, seq_length: int):
-        super(ComplexConvolutionalMultipleChannels, self).__init__()
-        self.channel = channel
-        self.seq_length = seq_length
-
-        from .utils import LayerNorm2d
-        self.proj_uncertainty = nn.Sequential(
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-            LayerNorm2d(channel),
-        )
-        self.proj_image = nn.Sequential(
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-            LayerNorm2d(channel),
-        )
-
-        self.block_1 = nn.Sequential(
-            nn.Conv2d(2 * channel, 3 * channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            LayerNorm2d(3 * channel),
-            nn.Conv2d(3 * channel, channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-            nn.Sigmoid(),
-        )
-
-        self.block_2 = nn.Sequential(
-            nn.Conv2d(2 * channel, channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(),
-            nn.Conv2d(channel, channel, kernel_size=1, padding='same'),
-        )
-
-    def forward(self, uncertainty: torch.Tensor, image_sequence: torch.Tensor) -> torch.Tensor:
-        u = self.proj_uncertainty(uncertainty)  # [B, C, H, W]
-        kalman_gains = []
-        for i in range(self.seq_length):
-            image = self.proj_image(image_sequence[:, i, ...])  # [B, C, H, W]
-            gain = self.block_1(torch.cat((u, image), dim=1))  # 2 * [B, C, H, W] -> [B, C, H, W]
-            gain = self.block_2(torch.cat((gain, u), dim=1))  # 2 * [B, C, H, W] -> [B, C, H, W]
             kalman_gains.append(gain)
         kalman_gains = torch.stack(kalman_gains, dim=1)  # L * [B, C, H, W] -> [B, L, C, H, W]
         return kalman_gains

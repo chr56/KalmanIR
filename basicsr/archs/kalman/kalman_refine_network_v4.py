@@ -3,12 +3,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
-from .difficult_zone_estimators_v4 import DifficultZoneEstimatorV4
 from .kalman_filter import KalmanFilter
-from .kalman_gain_calulators_v4 import build_gain_calculator_for_v4
-from .kalman_predictors import build_predictor
-from .uncertainty_estimators_v4 import build_uncertainty_estimator_for_v4
-
 
 class KalmanRefineNetV4(nn.Module):
     """
@@ -27,13 +22,18 @@ class KalmanRefineNetV4(nn.Module):
     ):
         super(KalmanRefineNetV4, self).__init__()
 
+        from .difficult_zone.estimator_v4 import DifficultZoneEstimatorV4
         self.difficult_zone_estimator = DifficultZoneEstimatorV4(dim)
 
+        from .uncertainty import build_uncertainty_estimator_for_v4
         self.uncertainty_estimator = build_uncertainty_estimator_for_v4(
             mode=uncertainty_estimation_mode, seq_length=img_seq, dim=dim
         )
 
+        from .kalman_gain import build_gain_calculator_for_v4
         kalman_gain_calculator = build_gain_calculator_for_v4(mode=gain_calculation_mode, dim=dim)
+
+        from .predictor import build_predictor
         predictor = build_predictor('convolutional', dim=dim, seq_length=img_seq)
 
         self.kalman_filter = KalmanFilter(kalman_gain_calculator=kalman_gain_calculator, predictor=predictor)

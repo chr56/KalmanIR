@@ -3,45 +3,13 @@ from torch import nn
 from torch.nn import functional as F
 
 
-def build_uncertainty_estimator_for_v6(variant, dim: int, seq_length: int, **kwargs) -> nn.Module:
-    update_ratio = kwargs.get('variant_uncertainty_update_ratio', 0.5)
-    if variant == "skipped":
-        return DummyUncertaintyEstimator()
-    elif variant == "mamba_recursive_state_adjustment_v1":
-        return MambaRecursiveStateAdjustmentV1(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v2":
-        return MambaRecursiveStateAdjustmentV2(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v2l":
-        return MambaRecursiveStateAdjustmentV2Lite(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v3":
-        return MambaRecursiveStateAdjustmentV3(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v4":
-        return MambaRecursiveStateAdjustmentV4(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v5":
-        return MambaRecursiveStateAdjustmentV5(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v6":
-        return MambaRecursiveStateAdjustmentV6(seq_length, dim)
-    elif variant == "mamba_recursive_state_adjustment_v6x":
-        return MambaRecursiveStateAdjustmentV6X(seq_length, dim)
-    elif variant == "recursive_convolutional_v1":
-        return RecursiveConvolutionalV1(seq_length, dim)
-    elif variant == "recursive_convolutional_v2":
-        return RecursiveConvolutionalV2(seq_length, dim)
-    elif variant == "recursive_convolutional_v3":
-        return RecursiveConvolutionalV3(seq_length, dim)
-    elif variant == "simple_recursive_convolutional_v1":
-        return SimpleRecursiveConvolutionalV1(seq_length, dim, update_ratio)
-    else:
-        raise ValueError(f"Unsupported variant: {variant}")
-
-
 class MambaRecursiveStateAdjustmentV1(nn.Module):
     def __init__(self, length: int, channel: int, **kwargs):
         super(MambaRecursiveStateAdjustmentV1, self).__init__()
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_image = LayerNorm2d(channel)
         self.norm_difficult_zone = LayerNorm2d(channel)
@@ -75,7 +43,7 @@ class MambaRecursiveStateAdjustmentV2(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_difficult_zone = LayerNorm2d(channel)
         self.norm_image = LayerNorm2d(channel)
@@ -114,12 +82,12 @@ class MambaRecursiveStateAdjustmentV2Lite(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_difficult_zone = LayerNorm2d(channel)
         self.norm_image = LayerNorm2d(channel)
 
-        from .convolutional_res_block import ResidualConvBlock
+        from ..convolutional_res_block import ResidualConvBlock
         self.conv_init = nn.Conv2d(channel, channel, kernel_size=3, padding='same')
         self.conv_image = ResidualConvBlock(
             channel, channel, num_layers=2,
@@ -164,7 +132,7 @@ class MambaRecursiveStateAdjustmentV3(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_difficult_zone = LayerNorm2d(channel)
         self.norm_image = LayerNorm2d(channel)
@@ -214,12 +182,12 @@ class MambaRecursiveStateAdjustmentV4(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_difficult_zone = LayerNorm2d(channel)
         self.norm_images = nn.ModuleList([LayerNorm2d(channel) for _ in range(length)])
 
-        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+        from ..convolutional_res_block import ConvolutionalResBlockLayerNorm
         self.conv_init = nn.Conv2d(channel, channel, kernel_size=3, padding='same', groups=3)
         self.conv_images = nn.ModuleList(
             [
@@ -262,13 +230,13 @@ class MambaRecursiveStateAdjustmentV5(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_init = LayerNorm2d(channel)
         self.norm_images = nn.ModuleList([LayerNorm2d(channel, elementwise_affine=True) for _ in range(length)])
         self.norm_image_features = LayerNorm2d(channel, elementwise_affine=False)
 
-        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
+        from ..convolutional_res_block import ConvolutionalResBlockLayerNorm
         self.dz_to_state = ConvolutionalResBlockLayerNorm(channel, activation_type='sigmoid')
         self.conv_init = ConvolutionalResBlockLayerNorm(channel, activation_type='sigmoid')
         self.conv_images = nn.ModuleList(
@@ -314,11 +282,11 @@ class MambaRecursiveStateAdjustmentV6(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl, LayerNorm2d
+        from ..utils import cal_kl, LayerNorm2d
         self.cal_kl = cal_kl
         self.norm_difficult_zone = LayerNorm2d(channel)
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.conv_init_sigma = nn.Conv2d(channel, channel, kernel_size=3, padding='same')
         self.conv_images = nn.ModuleList(
             [
@@ -358,10 +326,10 @@ class MambaRecursiveStateAdjustmentV6X(nn.Module):
         self.channel = channel
         self.iteration = length
 
-        from .utils import cal_kl
+        from ..utils import cal_kl
         self.cal_kl = cal_kl
 
-        from .convolutional_res_block import ConvolutionalResBlockGroupNorm
+        from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.conv_init_sigma = ConvolutionalResBlockGroupNorm(channel, norm_group=3, activation_type='leaky_relu')
         self.conv_images = nn.ModuleList(
             [
@@ -396,148 +364,3 @@ class MambaRecursiveStateAdjustmentV6X(nn.Module):
             )
         current = current + self.mamba_bias_final(difficult_zone)
         return current
-
-
-class SimpleRecursiveConvolutionalV1(nn.Module):
-    def __init__(self, length: int, channel: int, difficult_zone_update_ratio: float):
-        super(SimpleRecursiveConvolutionalV1, self).__init__()
-        self.iteration = length
-        self.channel = channel
-
-        from .convolutional_res_block import ConvolutionalResBlockLayerNorm
-
-        self.block1 = ConvolutionalResBlockLayerNorm(
-            2 * channel, channel, activation_type='leaky_relu'
-        )
-        self.block2 = ConvolutionalResBlockLayerNorm(
-            channel, channel, activation_type='sigmoid'
-        )
-
-        self.out_linear = nn.Conv2d(channel, channel, kernel_size=1)
-
-        self.update_ratio = difficult_zone_update_ratio
-        self.remain_ratio = 1.0 - difficult_zone_update_ratio
-
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        s = difficult_zone
-        for i in range(self.iteration):
-            image = image_sequence[:, i, ...]
-            s = torch.cat((s, image), dim=1)
-            s = self.block1(s)
-            s = self.block2(s)
-
-        uncertainty = s * self.update_ratio + difficult_zone * self.remain_ratio
-        uncertainty = self.out_linear(uncertainty)
-        return uncertainty
-
-
-class RecursiveConvolutionalV1(nn.Module):
-    def __init__(self, length: int, channel: int, **kwargs):
-        super(RecursiveConvolutionalV1, self).__init__()
-        self.iteration = length
-        self.channel = channel
-        self.residual_rate = 0.2
-        from .utils import LayerNorm2d
-        from .convolutional_res_block import ConvolutionalResBlock
-        self.norm_image = LayerNorm2d(channel)
-        self.conv_block = ConvolutionalResBlock(
-            3 * channel, channel,
-            norm_num_groups_1=1, norm_num_groups_2=1,
-        )
-
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        assert image_sequence.shape[1] == self.iteration
-
-        uncertainty = difficult_zone
-        for i in range(self.iteration):
-            image = self.norm_image(image_sequence[:, i, ...])
-            block = torch.cat((uncertainty, image, sigma), dim=1)
-            uncertainty = self.conv_block(block)
-
-        uncertainty = uncertainty * (1 - self.residual_rate) + difficult_zone * self.residual_rate
-
-        return uncertainty
-
-
-class RecursiveConvolutionalV2(nn.Module):
-    def __init__(self, length: int, channel: int, **kwargs):
-        super(RecursiveConvolutionalV2, self).__init__()
-        self.iteration = length
-        self.channel = channel
-        self.residual_rate = 0.2
-
-        self.norm_image = nn.GroupNorm(3, channel)
-
-        self.conv_block_main = nn.Sequential(
-            nn.GroupNorm(2, 2 * channel),
-            nn.Conv2d(2 * channel, channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, channel),
-            nn.Conv2d(channel, channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-        )
-        self.conv_block_side = nn.Sequential(
-            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
-            nn.LeakyReLU(inplace=True),
-        )
-
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        assert image_sequence.shape[1] == self.iteration
-
-        uncertainty = difficult_zone
-        for i in range(self.iteration):
-            image = self.norm_image(image_sequence[:, i, ...])
-            block = torch.cat((uncertainty, image), dim=1)
-            uncertainty = self.conv_block_main(block) + self.conv_block_side(block)
-
-        uncertainty = uncertainty * (1 - self.residual_rate) + difficult_zone * self.residual_rate
-
-        return uncertainty
-
-
-class RecursiveConvolutionalV3(nn.Module):
-    def __init__(self, length: int, channel: int, **kwargs):
-        super(RecursiveConvolutionalV3, self).__init__()
-        self.iteration = length
-        self.channel = channel
-
-        self.norm_image = nn.GroupNorm(3, channel)
-
-        self.conv_block_main = nn.Sequential(
-            nn.Conv2d(2 * channel, channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, channel),
-            nn.Conv2d(channel, channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-            nn.GroupNorm(1, channel),
-            nn.Conv2d(channel, channel, kernel_size=3, padding='same'),
-            nn.SiLU(inplace=True),
-        )
-        self.conv_block_side = nn.Sequential(
-            nn.Conv2d(2 * channel, 2 * channel, kernel_size=3, padding='same'),
-            nn.LeakyReLU(inplace=True),
-            nn.GroupNorm(2, 2 * channel),
-            nn.Conv2d(2 * channel, channel, kernel_size=1, padding='same'),
-            nn.LeakyReLU(inplace=True),
-        )
-
-        self.merge_rate = nn.Parameter(torch.ones(1) * 0.5)
-
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        assert image_sequence.shape[1] == self.iteration
-
-        state = difficult_zone
-        for i in range(self.iteration):
-            image = self.norm_image(image_sequence[:, i, ...])
-            block = torch.cat((state, image), dim=1)
-            state = self.conv_block_main(block) + self.conv_block_side(block)
-
-        uncertainty = difficult_zone + state * F.sigmoid(self.merge_rate)
-        uncertainty = F.sigmoid(uncertainty)
-
-        return uncertainty
-
-
-class DummyUncertaintyEstimator(nn.Module):
-    def forward(self, image_sequence: torch.Tensor, difficult_zone: torch.Tensor, sigma: torch.Tensor):
-        return difficult_zone

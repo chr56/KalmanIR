@@ -1,28 +1,5 @@
 import torch
-from torch import nn
-
-
-def build_gain_calculator_for_v4(mode, dim) -> nn.Module:
-    if mode == "ss2d":
-        return KalmanGainCalculatorMambaSimple(dim)
-    elif mode == "block":
-        return KalmanGainCalculatorMambaBlock(dim)
-    else:
-        return KalmanGainCalculatorV0(dim)
-
-
-class KalmanGainCalculatorV0(nn.Module):
-    def __init__(self, dim: int):
-        super(KalmanGainCalculatorV0, self).__init__()
-        from .convolutional_res_block import ConvolutionalResBlock
-        self.block = nn.Sequential(
-            ConvolutionalResBlock(dim, dim),
-            nn.Conv2d(dim, 1, kernel_size=1, padding=0),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+from torch import nn as nn
 
 
 class KalmanGainCalculatorMambaSimple(nn.Module):
