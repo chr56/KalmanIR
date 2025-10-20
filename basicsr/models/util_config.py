@@ -141,13 +141,14 @@ class MultipleLossOptions:
         loss_fn = loss['loss']
 
         target_format = loss['format']
-        origin_format = model_output_format[target_idx]
 
         if target_idx is None:
             # mixed loss
+            origin_format = None
             output_transform = lambda outputs: outputs
         else:
             # specified loss
+            origin_format = model_output_format[target_idx]
             output_transform = lambda outputs: convert_format(
                 outputs[target_idx], from_format=origin_format, to_format=target_format
             )
@@ -189,10 +190,15 @@ class MultipleLossOptions:
 
         for output_index, losses in self.losses_per_output.items():
             for loss in losses:
-                converting = f"{loss['origin_format']} -> {loss['target_format']}"
                 loss_type = loss['loss_fn'].__class__.__name__
+                if output_index == -1:
+                    converting = f"(Mixed)"
+                    index_name = 'ALL'
+                else:
+                    converting = f"{loss['origin_format']} -> {loss['target_format']}"
+                    index_name = str(output_index)
                 line = "  ".join([
-                    f"{str(output_index):<{col_widths[0]}}",
+                    f"{index_name :<{col_widths[0]}}",
                     f"{loss['name']:<{col_widths[1]}}",
                     f"{loss['mode']:<{col_widths[2]}}",
                     f"{loss_type:<{col_widths[3]}}",
