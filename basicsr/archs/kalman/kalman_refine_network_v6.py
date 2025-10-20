@@ -21,6 +21,7 @@ class KalmanRefineNetV6(nn.Module):
             variant_gain_calculation: str = '',
             variant_preditor: str = '',
             with_difficult_zone_affine: bool = False,
+            without_merge: bool = False,
             **kwargs,
     ):
         super(KalmanRefineNetV6, self).__init__()
@@ -49,6 +50,8 @@ class KalmanRefineNetV6(nn.Module):
         if self.with_difficult_zone_affine:
             self.difficult_zone_weight = nn.Parameter(torch.ones(dim))
             self.difficult_zone_bias = nn.Parameter(torch.zeros(dim))
+
+        self.without_merge = without_merge
 
         self.apply(init_weights)
 
@@ -97,7 +100,10 @@ class KalmanRefineNetV6(nn.Module):
             df_bias = self.difficult_zone_bias.view(-1, 1, 1).expand(-1, H, W)  # [C] -> [C, H, W]
             difficult_zone = df_weight * difficult_zone + df_bias
 
-        difficult_zone = torch.sigmoid(difficult_zone)
-        refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
+        if self.without_merge:
+            refined = refined_with_kf
+        else:
+            difficult_zone = torch.sigmoid(difficult_zone)
+            refined = (1 - difficult_zone) * refining + difficult_zone * refined_with_kf
 
         return refined
