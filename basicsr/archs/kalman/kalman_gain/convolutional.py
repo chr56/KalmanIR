@@ -11,7 +11,7 @@ class DeepConvolutionalMultipleChannelsV1(nn.Module):
         from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
 
         self.block1 = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='leaky_relu', kernel_size=3,
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='leaky_relu', kernel_size=3,
         )
         self.block2 = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='sigmoid', kernel_size=5,
@@ -52,7 +52,7 @@ class DeepConvolutionalMultipleChannelsV2(nn.Module):
 
         from ..convolutional_res_block import ConvolutionalResBlockGroupNorm
         self.block1 = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='leaky_relu', kernel_size=3,
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='leaky_relu', kernel_size=3,
         )
         self.block2 = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='leaky_relu', kernel_size=3,
@@ -95,7 +95,7 @@ class DeepConvolutionalMultipleChannelsV3a(nn.Module):
         )
 
         self.merge_block1 = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='leaky_relu'
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='leaky_relu'
         )
         self.merge_block2 = ConvolutionalResBlockGroupNorm(
             channels=channel, out_channels=channel, norm_group=3, activation_type='sigmoid'
@@ -137,7 +137,7 @@ class DeepConvolutionalMultipleChannelsV3b(nn.Module):
             channels=channel, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
         self.merge_block = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='sigmoid'
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
 
         self.update_ratio = uncertainty_update_ratio
@@ -177,7 +177,7 @@ class DeepConvolutionalMultipleChannelsV3c(nn.Module):
             channels=channel, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
         self.merge_block = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='sigmoid'
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
 
         self.update_ratio = uncertainty_update_ratio
@@ -217,7 +217,7 @@ class DeepConvolutionalMultipleChannelsV4(nn.Module):
             ]
         )
         self.merge_block = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='sigmoid'
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
 
         self.update_ratio = uncertainty_update_ratio
@@ -258,7 +258,7 @@ class DeepConvolutionalMultipleChannelsV5(nn.Module):
             ]
         )
         self.merge_block = ConvolutionalResBlockGroupNorm(
-            channels=channel * 2, out_channels=channel, norm_group=6, activation_type='sigmoid'
+            channels=channel * 2, out_channels=channel, norm_group=3, activation_type='sigmoid'
         )
 
         self.update_ratio = uncertainty_update_ratio
@@ -303,7 +303,7 @@ class DeepConvolutionalMultipleChannelsV5e(nn.Module):
         )
         self.merge_block = ResidualConvBlock(
             in_channels=channel * 2, out_channels=channel,
-            norm_type='group', norm_group=6, activation_type='silu'
+            norm_type='group', norm_group=[6, 3], activation_type='silu'
         )
 
         self.update_ratio = uncertainty_update_ratio
