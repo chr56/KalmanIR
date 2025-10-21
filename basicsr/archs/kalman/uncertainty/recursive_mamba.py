@@ -95,7 +95,7 @@ class MambaRecursiveStateAdjustmentV2Lite(nn.Module):
         )
         self.conv_merge = ResidualConvBlock(
             2 * channel, channel, num_layers=3,
-            norm_type='group', norm_group=6, activation_type='sigmoid',
+            norm_type='group', norm_group=[6, 3, 3], activation_type='sigmoid',
         )
 
         from basicsr.archs.modules_mamba import SS2DChanelFirst
