@@ -12,5 +12,6 @@ results/
 nohup*
 
 pretrain_weights/*.pth
+pretrain_weights/*.safetensors
 
 *.so
