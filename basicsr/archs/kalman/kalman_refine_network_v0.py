@@ -3,7 +3,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from diffusers.models.attention import AdaLayerNorm, FeedForward, CrossAttention
+from diffusers.models.attention import AdaLayerNorm, FeedForward
+from diffusers.models.attention_processor import Attention as CrossAttentionDU
 from einops import rearrange
 
 from basicsr.archs.arch_util import init_weights
@@ -205,7 +206,7 @@ class SparseCausalTransformerBlock(nn.Module):
         self.norm3 = nn.LayerNorm(dim)
 
         # Temp-Attn
-        self.attn_temp = CrossAttention(
+        self.attn_temp = CrossAttentionDU(
             query_dim=dim,
             heads=num_attention_heads,
             dim_head=attention_head_dim,
@@ -266,8 +267,15 @@ class SparseCausalTransformerBlock(nn.Module):
 
 
 # borrow from KEEP: https://github.com/jnjaby/KEEP
-class SparseCausalAttention(CrossAttention):
-    def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None, image_sequence_length=None):
+class SparseCausalAttention(CrossAttentionDU):
+    def forward(
+            self,
+            hidden_states,
+            encoder_hidden_states=None,
+            attention_mask=None,
+            image_sequence_length=None,
+            **cross_attention_kwargs
+    ):
         batch_size, sequence_length, _ = hidden_states.shape
 
         if self.group_norm is not None:

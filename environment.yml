@@ -37,7 +37,7 @@ dependencies:
       - imageio
       - lpips==0.1.4
       - timm==0.9.16
-      - diffusers==0.11.0
+      - diffusers==0.19.3
       - tokenizers==0.15.2
       - transformers==4.38.1
       - causal-conv1d==1.0.0
