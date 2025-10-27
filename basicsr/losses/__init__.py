@@ -14,6 +14,9 @@ from .gan_losses import (
 from .perceptual_losses import (
     PerceptualLoss
 )
+from .vae_losses import (
+    VAELoss
+)
 # complex
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
@@ -31,6 +34,7 @@ __all__ = [
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
     'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
     'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss', 'LFP_MixedLoss',
+    'VAELoss'
 ]
 
 
