@@ -222,6 +222,19 @@ def convert_format(tensor: Tensor, from_format, to_format) -> Tensor:
         raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
 
 
+def apply_parameter_frozen_settings(target_network, target_names: list, frozen: bool):
+    logger = get_root_logger()
+    grouped = target_network.partitioned_parameters()
+    assert isinstance(target_names, list), f"frozen parameter names must be a list"
+
+    for module_name in target_names:
+        parameters = grouped[module_name]
+        logger.info(f"Frozen module {module_name} parameters...")
+        for p in parameters:
+            p.requires_grad = (not frozen)
+        pass
+
+
 def read_optimizer_options(train_opt, net_g, logger, is_discriminator=False):
     """
     Example of `train_opt`

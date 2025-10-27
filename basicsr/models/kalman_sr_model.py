@@ -25,6 +25,7 @@ from .util_config import (
     read_loss_options,
     read_optimizer_options,
     valid_model_output_settings,
+    apply_parameter_frozen_settings,
 )
 
 
@@ -63,6 +64,12 @@ class KalmanSRModel(BaseModel):
             self.optimizer_g = None
             self.init_training_settings()
             self.log_gan_output = self.opt.get('log_gan_output_values', True)
+
+            # frozen target modules
+            frozen_module_names_g = self.opt['train'].get('frozen_module_names_g', None)
+            if frozen_module_names_g is not None:
+                assert load_path is not None, f"pretrain_network_g not defined before frozen_module_names_g"
+                apply_parameter_frozen_settings(self.net_g, frozen_module_names_g, frozen=True)
 
     def init_training_settings(self):
         self.net_g.train()
