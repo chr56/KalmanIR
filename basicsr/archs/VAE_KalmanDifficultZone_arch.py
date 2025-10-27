@@ -1,0 +1,126 @@
+# Code Implementation of the KalmanIR Model
+from typing import Optional, Callable, Tuple, Dict, Iterator
+from functools import partial
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from basicsr.archs.arch_util import init_weights
+from basicsr.utils.registry import ARCH_REGISTRY
+from basicsr.utils import decimal_to_binary, binary_to_decimal
+
+from .IRNet import IRNet
+from .modules_mamba import SS2DChanelFirst
+
+
+@ARCH_REGISTRY.register()
+class KalmanDifficultZoneVAEv0(nn.Module):
+    """ VAE Model for Difficult Zone estimator for KalmanIR
+        :param in_chans(int): Number of input image channels. Default: 3
+        :param kwargs: (the remaining arguments for backbone network)
+       """
+
+    def __init__(self,
+                 in_chans=3,
+                 variant_difficult_zone_estimator: str = '',
+                 variant_vae: str = '',
+                 **kwargs):
+        super(KalmanDifficultZoneVAEv0, self).__init__()
+
+        out_chans = in_chans * 8
+
+        self.ir_net = IRNet(in_chanel=in_chans, out_chanel=out_chans, **kwargs)
+
+        self.mamba_error_estimate = MambaErrorEstimation(channel=out_chans)
+
+        from .kalman.difficult_zone import build_difficult_zone_estimator
+        self.difficult_zone_estimator = build_difficult_zone_estimator(
+            variant=variant_difficult_zone_estimator, dim=out_chans, seq_length=3, **kwargs,
+        )
+
+        scaled_size = kwargs['img_size'] * kwargs['upscale']
+
+        from .vae import build_vae
+        self.vae = build_vae(variant_vae, scaled_size=scaled_size, channels=out_chans, **kwargs)
+
+        self.apply(init_weights)
+
+    def partitioned_parameters(self) -> Dict[str, Iterator[nn.Parameter]]:
+        from basicsr.utils.module_util import retrieve_parameters
+        return {
+            "backbone": retrieve_parameters(self.ir_net),
+            "error_estimation": retrieve_parameters(self.mamba_error_estimate),
+            "difficult_zone_estimator": retrieve_parameters(self.difficult_zone_estimator),
+            "vae": retrieve_parameters(self.vae),
+        }
+
+    def flops(self):
+        flops = 0
+        flops += self.ir_net.flops()
+        return flops
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {'relative_position_bias_table'}
+
+    def forward(self, x):
+        #################################
+        ########   Dichotomy IR  ########
+        #################################
+
+        x = self.ir_net(x)  # [B, 2 * 3 * 8, H, W]
+
+        binary_a = torch.sin(x[:, :24, ...])
+        binary_b = torch.sin(x[:, 24:, ...])
+
+        binary_refined_1, sigma = self.mamba_error_estimate(binary_a, binary_b)
+        binary_refined_1 = torch.sin(binary_refined_1)
+
+        #################################
+        ########     Kalman IR   ########
+        #################################
+        ########  difficult zone ########
+        #################################
+
+        difficult_zone = self.difficult_zone_estimator(binary_refined_1, binary_a, binary_b)
+
+        difficult_zone_hat, mu, log_var = self.vae(difficult_zone)
+
+        ##########################################
+
+        return [binary_refined_1, (difficult_zone_hat, mu, log_var, difficult_zone)]
+
+
+class MambaErrorEstimation(nn.Module):
+    def __init__(self, channel: int, **kwargs):
+        super(MambaErrorEstimation, self).__init__()
+        self.mamba_sigma = SS2DChanelFirst(d_model=channel, **kwargs)
+        self.mamba_bias = SS2DChanelFirst(d_model=channel, **kwargs)
+
+    def _cal_kl(self, pred, target):
+        p = torch.log_softmax(pred, dim=1)
+        q = torch.softmax(target, dim=1)
+        return F.kl_div(p, q, reduction='none')
+
+    def _forward_one_step(self, base, ref):
+        kl = self._cal_kl(base, ref)
+        sigma = self.mamba_sigma(kl)
+        bias = self.mamba_bias(base)
+        refined = (base / torch.exp(-sigma)) + bias
+        return refined, sigma, bias
+
+    def forward(self, a, b, iteration: int = 1):
+        sigma = None
+        refined = None
+        for i in range(iteration):
+            if i == 0:
+                refined, sigma, _ = self._forward_one_step(base=a, ref=b)
+            else:
+                refined, sigma, _ = self._forward_one_step(base=a, ref=refined)
+
+        return refined, sigma
