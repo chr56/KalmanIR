@@ -223,6 +223,11 @@ class KalmanSRModel(BaseModel):
                     loss_dict[f'l_{name}'] = l_gan
                     if self.log_gan_output:
                         loss_dict[f'out_discr_{name}'] = torch.mean(d_out.detach())
+                elif mode == 'vae':
+                    x_hat, mu, var, x = sr
+                    l_vae = loss_fn(x_hat, mu, var, x)
+                    l_total += l_vae
+                    loss_dict['l_vae'] = l_vae
                 pass
         return l_total
 

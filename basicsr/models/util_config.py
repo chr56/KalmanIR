@@ -19,7 +19,7 @@ def frozen_model_parameters(net, frozen: bool):
 
 def valid_model_output_settings(model_output_format, enabled_output_indexes):
     # outputs
-    _supported_formats = ['B', 'D']
+    _supported_formats = ['B', 'D', 'I']
     if isinstance(model_output_format, list):
         for f in model_output_format:
             if f not in _supported_formats:
@@ -68,7 +68,7 @@ def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[di
 
     criteria = OrderedDict()
 
-    _supported_loss_mode = ['pixel', 'perceptual', 'gan']
+    _supported_loss_mode = ['pixel', 'perceptual', 'gan', 'vae']
 
     require_discriminator = False
     if train_opt.get('losses'):
@@ -115,6 +115,14 @@ def read_loss_options(train_opt, device, output_length: int, logger) -> Tuple[di
                 'target': None,
                 'format': 'D',
                 'mode': 'perceptual',
+            }
+        if train_opt.get('vae_opt'):
+            loss_fn = build_loss(train_opt['vae_opt']).to(device)
+            criteria['perceptual'] = {
+                'loss': loss_fn,
+                'target': None,
+                'format': 'I',
+                'mode': 'vae',
             }
 
     if len(criteria) == 0:
@@ -218,6 +226,8 @@ def convert_format(tensor: Tensor, from_format, to_format) -> Tensor:
         return decimal_to_binary((tensor * 255.))
     elif from_format == 'B' and to_format == 'D':
         return binary_to_decimal(tensor)
+    elif to_format == 'I':
+        return tensor # Identical
     else:
         raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
 
