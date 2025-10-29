@@ -152,6 +152,63 @@ class DeepConvolutionalV2(nn.Module):
         difficult_zone = x + y
         return difficult_zone
 
+class DeepConvolutionalV3(nn.Module):
+    def __init__(self, channel: int, merge_ratio: float):
+        super(DeepConvolutionalV3, self).__init__()
+
+        self.channel = channel
+
+        self.merge_ratio = merge_ratio
+        self.keep_ratio = 1 - self.merge_ratio
+        from ..utils import LayerNorm2d
+        self.norm_output = LayerNorm2d(channel)
+
+        from ..convolutional_res_block import ResidualConvBlock
+        self.channel_stacked = 3 * channel + 1
+
+        self.block1 = ResidualConvBlock(
+            self.channel_stacked, channel,
+            activation_type='leaky_relu', norm_type='layer',
+        )
+        self.block2 = ResidualConvBlock(
+            channel, channel,
+            activation_type='silu', norm_type='group', norm_group=3,
+        )
+
+    def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        """
+        :param a: shape [B, C, H, W]
+        :param b: shape [B, C, H, W]
+        :param c: shape [B, C, H, W]
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        ##################################
+        ##### Calculate Difference #######
+        ##################################
+
+        cs_difference = mean_difference(cal_cs, b, a, c)  # [B, 1, H, W]
+        ae_difference = mean_difference(cal_ae, b, a, c)  # [B, C, H, W]
+        bce_difference = mean_difference(cal_bce, b, a, c)  # [B, C, H, W]
+
+        all_difference = torch.cat((b, cs_difference, ae_difference, bce_difference), dim=1)  # [B, C', H, W]
+
+        ##################################
+        #### Difficult Zone Estimation ###
+        ##################################
+
+        # [B, C', H, W] -> [B, C, H, W] * ratio
+        x = all_difference
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.merge_ratio * x
+
+        # [B, C, H, W] * (1 - ratio)
+        y = self.keep_ratio * ae_difference
+
+        difficult_zone = self.norm_output(x + y)
+        return difficult_zone
+
 
 class MultiConvolutionalV1(nn.Module):
     def __init__(self, channel: int, hidden_channels: int):

@@ -15,6 +15,9 @@ def build_difficult_zone_estimator(variant, dim: int, **kwargs) -> nn.Module:
     elif variant == "deep_convolutional_v2":
         from .convolutional import DeepConvolutionalV2
         return DeepConvolutionalV2(channel=dim, merge_ratio=merge_ratio)
+    elif variant == "deep_convolutional_v3":
+        from .convolutional import DeepConvolutionalV3
+        return DeepConvolutionalV3(channel=dim, merge_ratio=merge_ratio)
     elif variant == "multi_convolutional_v1":
         from .convolutional import MultiConvolutionalV1
         return MultiConvolutionalV1(channel=dim, hidden_channels=dim // 3)
