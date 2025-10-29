@@ -104,6 +104,9 @@ class KalmanSRModel(BaseModel):
         # set up schedulers
         self.setup_schedulers()
 
+        # set up gradient clipping
+        self.grad_clip_max_norm = train_opt.get('grad_clip_max_norm', None)
+
     def load_pretrained_discriminator(self, disc_opt):
         self.net_d = build_network(disc_opt)
         self.net_d = self.model_to_device(self.net_d)
@@ -156,6 +159,9 @@ class KalmanSRModel(BaseModel):
 
         l_total = self.calculate_losses(output, self.criteria_per_output.losses(), loss_dict)
         l_total.backward()
+
+        if self.grad_clip_max_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.net_g.parameters(), max_norm=self.grad_clip_max_norm)
 
         self.optimizer_g.step()
 
