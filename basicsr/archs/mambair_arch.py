@@ -53,8 +53,10 @@ class MambaIR(nn.Module):
                  img_range=1.,
                  upsampler='',
                  resi_connection='1conv',
+                 return_a_list: bool = False,
                  **kwargs):
         super(MambaIR, self).__init__()
+        self.return_a_list = return_a_list
         num_in_ch = in_chans
         num_out_ch = in_chans
         num_feat = 64
@@ -205,7 +207,10 @@ class MambaIR(nn.Module):
 
         x = x / self.img_range + self.mean
 
-        return x
+        if self.return_a_list:
+            return [x]
+        else:
+            return x
 
     def flops(self):
         flops = 0
