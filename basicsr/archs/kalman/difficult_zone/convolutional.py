@@ -152,6 +152,7 @@ class DeepConvolutionalV2(nn.Module):
         difficult_zone = x + y
         return difficult_zone
 
+
 class DeepConvolutionalV3(nn.Module):
     def __init__(self, channel: int, merge_ratio: float):
         super(DeepConvolutionalV3, self).__init__()
@@ -255,3 +256,21 @@ class MultiConvolutionalV1(nn.Module):
         difficult_zone = self.conv_out(middle)
 
         return difficult_zone
+
+
+class DifficultZoneEstimatorResidualOnly(nn.Module):
+    def __init__(self, channel: int, norm: bool = True, **kwargs):
+        super(DifficultZoneEstimatorResidualOnly, self).__init__()
+        self.channel = channel
+
+        if norm:
+            from basicsr.archs.kalman.utils import LayerNorm2d
+            self.norm = LayerNorm2d(channel)
+        else:
+            self.norm = nn.Identity()
+
+    def forward(self, a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+        ae_difference = self.norm(
+            mean_difference(cal_ae, b, a, c)
+        )
+        return ae_difference

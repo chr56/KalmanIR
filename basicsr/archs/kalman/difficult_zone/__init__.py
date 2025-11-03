@@ -3,6 +3,9 @@ from torch import nn
 
 def build_difficult_zone_estimator(variant, dim: int, **kwargs) -> nn.Module:
     merge_ratio = kwargs.get('variant_difficult_zone_merge_ratio', 0.5)
+    if variant == "residual_only":
+        from .convolutional import DifficultZoneEstimatorResidualOnly
+        return DifficultZoneEstimatorResidualOnly(channel=dim)
     if variant == "original_v4":
         from .estimator_v4 import DifficultZoneEstimatorV4
         return DifficultZoneEstimatorV4(channel=dim)
