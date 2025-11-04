@@ -16,9 +16,12 @@ class VGGStyleDiscriminator(nn.Module):
         num_feat (int): Channel number of base intermediate features.Default: 64.
     """
 
-    def __init__(self, num_in_ch, num_feat, input_size=128):
+    def __init__(self, num_in_ch, num_feat, input_size=128, crop_boarder=0):
         super(VGGStyleDiscriminator, self).__init__()
         self.input_size = input_size
+        self.crop_boarder = crop_boarder
+        self.actual_input_size = input_size + crop_boarder * 2
+
         assert self.input_size == 128 or self.input_size == 256, (
             f'input size must be 128 or 256, but received {input_size}')
 
@@ -59,7 +62,11 @@ class VGGStyleDiscriminator(nn.Module):
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, x):
-        assert x.size(2) == self.input_size, (f'Input size must be identical to input_size, but received {x.size()}.')
+        assert x.size(2) == self.actual_input_size, (
+            f'Input size must be identical to input_size: expected {self.actual_input_size} but received {x.size()[2:3]}.'
+        )
+        if self.crop_boarder > 0:
+            x = x[:, :, self.crop_boarder:-self.crop_boarder, self.crop_boarder:-self.crop_boarder]
 
         feat = self.lrelu(self.conv0_0(x))
         feat = self.lrelu(self.bn0_1(self.conv0_1(feat)))  # output spatial size: /2
