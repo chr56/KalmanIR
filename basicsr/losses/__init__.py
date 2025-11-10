@@ -18,6 +18,7 @@ from .perceptual_losses import (
 from .integrated_gan_losses import IntegratedGANLoss
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
+    DifficultZoneReconstructionNoiseLoss,
     V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
     L1FourierGAN_MixedLoss, LFBG_MixedLoss, LFP_MixedLoss
 )
@@ -30,6 +31,7 @@ __all__ = [
     'gradient_penalty_loss', 'r1_penalty', 'g_path_regularize',
     # Customs
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
+    'DifficultZoneReconstructionNoiseLoss',
     'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
     'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss', 'LFP_MixedLoss',
     'IntegratedGANLoss'

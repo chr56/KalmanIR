@@ -10,7 +10,7 @@ from .perceptual_losses import PerceptualLoss
 from .gan_losses import GANLoss
 from .primitive_losses import (
     bce_loss, bce_with_logits_loss,
-    L1Loss, CharbonnierLoss,
+    L1Loss, CharbonnierLoss, MSELoss,
 )
 
 _reduction_modes = ['none', 'mean', 'sum']
@@ -358,6 +358,7 @@ class L1FourierGAN_MixedLoss(nn.Module):
         )
         return loss_total
 
+
 @LOSS_REGISTRY.register()
 class LFBG_MixedLoss(nn.Module):
     """
@@ -496,7 +497,7 @@ class LFP_MixedLoss(nn.Module):
             vgg_type=perceptual_vgg_arch,
             criterion=perceptual_criterion,
             perceptual_weight=1.0,
-            style_weight=0., # disable stype loss
+            style_weight=0.,  # disable stype loss
         )
 
     def forward(self,
@@ -532,3 +533,37 @@ class LFP_MixedLoss(nn.Module):
                 self.gan_weights * loss_perceptual
         )
         return loss_total
+
+
+@LOSS_REGISTRY.register()
+class DifficultZoneReconstructionNoiseLoss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean', mode: str = 'l1'):
+        super(DifficultZoneReconstructionNoiseLoss, self).__init__()
+        if reduction not in ['none', 'mean', 'sum']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+        if mode == 'l1':
+            self.loss_fn = L1Loss(reduction=self.reduction)
+        elif mode == 'l2' or mode == 'mse':
+            self.loss_fn = MSELoss(reduction=self.reduction)
+        elif mode == 'bce':
+            self.loss_fn = BCELoss(reduction=self.reduction, with_sigmoid=True)
+        elif mode == 'fourier':
+            self.loss_fn = FourierLoss(reduction=self.reduction)
+        else:
+            raise ValueError(f'Unsupported reduction mode: {reduction}.')
+
+    def forward(self,
+                pred: Tuple[torch.Tensor, torch.Tensor],
+                target: torch.Tensor,
+                weight=None, **kwargs):
+        difficult_zone = pred[0]
+        image_sr = pred[1]
+        image_hr = target
+
+        noise = torch.abs(image_sr - image_hr)
+        loss = self.loss_fn(difficult_zone, noise, weight)
+
+        return self.loss_weight * loss
