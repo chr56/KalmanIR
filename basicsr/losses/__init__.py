@@ -22,6 +22,7 @@ from .losses import (
     V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
     L1FourierGAN_MixedLoss, LFBG_MixedLoss, LFP_MixedLoss
 )
+from .mixed_loss import MixedLoss
 
 __all__ = [
     # Original
@@ -30,6 +31,7 @@ __all__ = [
     'GANLoss', 'GANFeatLoss', 'MultiScaleGANLoss',
     'gradient_penalty_loss', 'r1_penalty', 'g_path_regularize',
     # Customs
+    'MixedLoss',
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
     'DifficultZoneReconstructionNoiseLoss',
     'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
