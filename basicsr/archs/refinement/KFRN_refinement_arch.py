@@ -30,7 +30,7 @@ class KFRN(nn.Module):
         self.kalman_gain_calculator: nn.Module = build_module(kalman_gain_calculator)
         self.kalman_predictor: nn.Module = build_module(kalman_predictor)
 
-    def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, images: List[torch.Tensor]) -> dict:
         # Input shape L * [B, C, H, W]
         images = [torch.sin(image) for image in images]
         images = torch.stack(images, dim=1) # [B, L, C, H, W]
@@ -44,7 +44,19 @@ class KFRN(nn.Module):
         )
 
         # Output shape [B, C, H, W]
-        return refined
+        return {
+            'sr_refined': refined,
+            'difficult_zone': difficult_zone,
+        }
+
+    def model_output_format(self):
+        return {
+            'sr_refined': 'I',
+            'difficult_zone': '-',
+        }
+
+    def primary_output(self):
+        return 'sr_refined'
 
 
 def perform_kalman_filtering(

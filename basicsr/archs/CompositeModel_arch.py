@@ -49,7 +49,23 @@ class CompositeModel(nn.Module):
         coarse_output = self.base_model(x)  # [B, n * C, H, W]
 
         coarse_branches = torch.chunk(coarse_output, self.branch, dim=1)  # n * [B, C, H, W]
+        coarse_output = {
+            f'sr_{i + 1}': coarse_branch
+            for i, coarse_branch in enumerate(coarse_branches)
+        } # dict { sr_{k} : [B, C, H, W] }
 
-        refined_output = self.refinement_net(coarse_branches)
+        refined_output: dict = self.refinement_net(coarse_branches) #  refined SR + other (e.g. Difficult Zone)
 
-        return [refined_output, *coarse_branches]
+        return {**coarse_output, **refined_output}
+
+    def model_output_format(self):
+        format_base_model = {f'sr_{i + 1}': 'I' for i in range(self.branch)}
+        format_refinement_net = self.refinement_net.model_output_format()
+
+        return {
+            **format_base_model,
+            **format_refinement_net,
+        }
+
+    def primary_output(self):
+        return self.refinement_net.primary_output()

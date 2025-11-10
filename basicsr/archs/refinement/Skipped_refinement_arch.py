@@ -13,4 +13,10 @@ class Skipped(nn.Module):
         super().__init__()
 
     def forward(self, images: List[torch.Tensor]):
+        return {}
+
+    def model_output_format(self):
+        return {}
+
+    def primary_output(self):
         return None

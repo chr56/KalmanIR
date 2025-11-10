@@ -12,9 +12,19 @@ class AverageFusion(nn.Module):
     def __init__(self, **kwargs):
         super(AverageFusion, self).__init__()
 
-    def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, images: List[torch.Tensor]) -> dict:
         # Input shape n * [B, C, H, W]
         stacked = torch.stack(images) # [n, B, C, H, W]
         averaged = torch.mean(stacked, dim=0)
         # Output shape [B, C, H, W]
-        return averaged
+        return {
+            'sr_refined': averaged, # [B, C, H, W]
+        }
+
+    def model_output_format(self):
+        return {
+            'sr_refined': 'I',
+        }
+
+    def primary_output(self):
+        return 'sr_refined'

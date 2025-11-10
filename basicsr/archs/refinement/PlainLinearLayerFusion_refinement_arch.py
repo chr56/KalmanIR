@@ -17,10 +17,19 @@ class PlainLinearLayerFusion(nn.Module):
             branch * channels, channels, kernel_size=1, stride=1, padding='same'
         )
 
-    def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, images: List[torch.Tensor]) -> dict:
         # Input shape n * [B, C, H, W]
         x = torch.cat(images, dim=1)
         x = self.conv(x)
         x = F.sigmoid(x)
-        # Output shape [B, C, H, W]
-        return x
+        return {
+            'sr_refined': x,  # Output shape [B, C, H, W]
+        }
+
+    def model_output_format(self):
+        return {
+            'sr_refined': 'I',
+        }
+
+    def primary_output(self):
+        return 'sr_refined'
