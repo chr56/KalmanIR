@@ -152,6 +152,10 @@ class MultiBranchMambaIR(nn.Module):
         else:
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
+            if num_in_ch != num_out_ch:
+                self.conv_resi = nn.Conv2d(num_in_ch, num_out_ch, 3, 1, 1)
+            else:
+                self.conv_resi = nn.Identity()
 
         self.apply(init_weights)
 
@@ -168,13 +172,13 @@ class MultiBranchMambaIR(nn.Module):
         x = self.patch_embed(x)  # N,L,C
 
         x = self.pos_drop(x)
-        out = []
+
         for layer in self.layers:
             x = layer(x, x_size)
         x = self.norm(x)  # b seq_len c
         x = self.patch_unembed(x, x_size)
 
-        return x, out
+        return x
 
     def forward(self, x):
         # input shape [B, C, H, W]
@@ -186,20 +190,23 @@ class MultiBranchMambaIR(nn.Module):
         if self.upsampler == 'pixelshuffle':
             # for classical SR
             x = self.conv_first(x)
-            feat, outs = self.forward_features(x)
-            x = self.conv_after_body(feat) + x
-            feat_before_upsample = self.conv_before_upsample(x)
-            x = self.conv_last(self.upsample(feat_before_upsample))
+            x = self.conv_after_body(self.forward_features(x)) + x
+            x = self.conv_before_upsample(x)
+            x = self.conv_last(self.upsample(x))
+
         elif self.upsampler == 'pixelshuffledirect':
             # for lightweight SR
-            feat, outs = self.forward_features(x)
-            x = self.conv_after_body(feat) + x
+            x = self.conv_first(x)
+            x = self.conv_after_body(self.forward_features(x)) + x
             x = self.upsample(x)
+            x = x.contiguous()
         else:
             # for image denoising
-            x_first = self.conv_first(x)
-            res = self.conv_after_body(self.forward_features(x_first)) + x_first
-            x = x + self.conv_last(res)
+            x_in = x
+            x = self.conv_first(x)
+            x = self.conv_after_body(self.forward_features(x)) + x
+            x = self.conv_last(x) + self.conv_resi(x_in)
+            x = x.contiguous()
 
         if self.norm_image:
             x = x / self.img_range + self.mean
