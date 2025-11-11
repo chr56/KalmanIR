@@ -55,6 +55,7 @@ class MultiBranchMambaIR(nn.Module):
         num_in_ch = channel
         num_out_ch = channel * branch
         num_feat = 64
+        self.branch = branch
 
         self.norm_image = norm_image
         self.img_range = img_range
@@ -152,10 +153,6 @@ class MultiBranchMambaIR(nn.Module):
         else:
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
-            if num_in_ch != num_out_ch:
-                self.conv_resi = nn.Conv2d(num_in_ch, num_out_ch, 3, 1, 1)
-            else:
-                self.conv_resi = nn.Identity()
 
         self.apply(init_weights)
 
@@ -180,7 +177,7 @@ class MultiBranchMambaIR(nn.Module):
 
         return x
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         # input shape [B, C, H, W]
 
         if self.norm_image:
@@ -205,7 +202,7 @@ class MultiBranchMambaIR(nn.Module):
             x_in = x
             x = self.conv_first(x)
             x = self.conv_after_body(self.forward_features(x)) + x
-            x = self.conv_last(x) + self.conv_resi(x_in)
+            x = self.conv_last(x) + x_in.repeat(1, self.branch, 1, 1)
             x = x.contiguous()
 
         if self.norm_image:
