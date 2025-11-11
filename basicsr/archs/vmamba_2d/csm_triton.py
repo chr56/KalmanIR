@@ -15,7 +15,7 @@ except:
     WITH_TRITON = False
 
 # WITH_TRITON = True
-# WITH_TRITON = False
+WITH_TRITON = False
 if WITH_TRITON:
     try:
         import triton
