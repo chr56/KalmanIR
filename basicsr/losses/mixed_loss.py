@@ -26,8 +26,8 @@ class MixedLoss(nn.Module):
         return True
 
     def summary(self) -> str:
-        headers = ["Target", "Name", "Mode", "Type"]
-        col_widths = [14, 18, 10, 15]
+        headers = ["Target", "Mode", "Type", "Weight", "Name"]
+        col_widths = [18, 16, 18, 5, 10]
 
         separator = "-" * (sum(col_widths) + (len(col_widths) - 1) * 2)
         header_line = "  ".join(f"{h:<{w}}" for h, w in zip(headers, col_widths))
@@ -35,12 +35,16 @@ class MixedLoss(nn.Module):
         lines = [separator, "Losses", separator, header_line, separator]
 
         for loss in self.loss_components:
+            loss: _LossComponent
             loss_type = loss.loss_fn.__class__.__name__
+            loss_weight = loss.loss_fn.loss_weight if hasattr(loss.loss_fn, 'loss_weight') else 'N/A'
+            loss_name = loss.name if loss.name else ''
             line = "  ".join([
                 f"{loss.target :<{col_widths[0]}}",
-                f"{loss.name :<{col_widths[1]}}",
-                f"{loss.mode :<{col_widths[2]}}",
-                f"{loss_type :<{col_widths[3]}}",
+                f"{loss.mode :<{col_widths[1]}}",
+                f"{loss_type :<{col_widths[2]}}",
+                f"{loss_weight :<{col_widths[3]}}",
+                f"{loss_name :<{col_widths[4]}}",
             ])
             lines.append(line)
 
@@ -62,7 +66,7 @@ def _create_loss_component_from_opt(opt: dict) -> '_LossComponent':
 
     target = opt.get('target', '*')
 
-    name = str(opt.get('name', f'loss_{target}'))
+    name = opt.get('name') if 'name' in opt else None
     mode = str(opt.get('mode', _DEFAULT_MODE))
     assert mode in SUPPORTED_LOSS_MODE
 
@@ -76,7 +80,7 @@ def _create_loss_component_from_opt(opt: dict) -> '_LossComponent':
 
 class _LossComponent(nn.Module):
 
-    def __init__(self, name: str, mode: str, target: str, loss_fn: nn.Module, transform=None):
+    def __init__(self, name: Union[str, None], mode: str, target: str, loss_fn: nn.Module, transform=None):
         super(_LossComponent, self).__init__()
         self.name = name
         self.mode = mode
@@ -85,7 +89,10 @@ class _LossComponent(nn.Module):
         self.transform = transform
 
     def forward(self, bundle: Dict[str, Any], loss_dict: dict, log_gan_output: bool = True):
-        loss_value_name = f'l_{self.target}_{self.name}'
+        if self.name:
+            loss_value_name = f'l_{self.target}_{self.name}'
+        else:
+            loss_value_name = f'l_{self.target}'
 
         if self.target != '*':
             prediction = bundle[self.target]
@@ -101,12 +108,12 @@ class _LossComponent(nn.Module):
             loss_value = self.loss_fn(d_out, True)
             loss_dict[loss_value_name] = loss_value
             if log_gan_output:
-                loss_dict[f'out_discr_{self.target}_{self.name}'] = torch.mean(d_out.detach())
+                loss_dict[f'out_discr_{self.target}'] = torch.mean(d_out.detach())
         elif self.mode == 'gan_frozen':
             loss_value, d_out = self.loss_fn(prediction, True)
             loss_dict[loss_value_name] = loss_value
             if log_gan_output:
-                loss_dict[f'out_discr_{self.target}_{self.name}'] = torch.mean(d_out.detach())
+                loss_dict[f'out_discr_{self.target}'] = torch.mean(d_out.detach())
         elif self.mode == 'perceptual':
             loss_value = 0
             l_perceptual, l_style = self.loss_fn(prediction, bundle['gt'])

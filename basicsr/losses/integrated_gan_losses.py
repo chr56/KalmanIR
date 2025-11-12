@@ -21,6 +21,7 @@ class IntegratedGANLoss(nn.Module):
             loss_weight=1.0,
     ):
         super(IntegratedGANLoss, self).__init__()
+        self.loss_weight = loss_weight
         self.discriminator = _load_discriminator(discriminator, discriminator_weights)
         self.loss_fn = GANLoss(gan_type, real_label_val, fake_label_val, loss_weight)
 
