@@ -1,4 +1,4 @@
-from typing import Dict, Iterator, Any
+from typing import Dict, Iterator, Any, List
 
 import torch
 import torch.nn as nn
@@ -12,25 +12,28 @@ class CompositeModel(nn.Module):
 
     def __init__(self,
                  upscale: int = 4,
-                 branch: int = 3,
                  channels: int = 3,
-                 base_model_opt: Dict[str, Any] = None,
-                 refinement_model_opt: Dict[str, Any] = None,
+                 branch: int = 3,
+                 branch_names: List[str] = None,
+                 base_model: Dict[str, Any] = None,
+                 refinement_model: Dict[str, Any] = None,
                  **kwargs):
         super(CompositeModel, self).__init__()
 
         from basicsr.archs.base import build_base_network
         from basicsr.archs.refinement import build_refinement_network
-        base_model_opt.update(upscale=upscale, branch=branch, channels=channels)
-        refinement_model_opt.update(upscale=upscale, branch=branch, channels=channels)
+        base_model.update(upscale=upscale, branch=branch, channels=channels)
+        refinement_model.update(upscale=upscale, branch=branch, channels=channels)
 
         self.upscale = upscale
 
-        self.branch = branch
         self.channels = channels
+        self.branch = branch
+        self.branch_names = branch_names if branch_names is not None else [f"sr_{i + 1}" for i in range(branch)]
+        assert len(self.branch_names) == self.branch, "`branch_names` size must be equal to `branch`"
 
-        self.base_model: nn.Module = build_base_network(base_model_opt)
-        self.refinement_net: nn.Module = build_refinement_network(refinement_model_opt)
+        self.base_net: nn.Module = build_base_network(base_model)
+        self.refinement_net: nn.Module = build_refinement_network(refinement_model)
 
         self.apply(init_weights)
 
@@ -41,20 +44,20 @@ class CompositeModel(nn.Module):
         )
 
         return {
-            "base_model": retrieve_parameters(self.base_model),
+            "base_model": retrieve_parameters(self.base_net),
             **refinement_net_parameters,
         }
 
     def forward(self, x):
-        coarse_output = self.base_model(x)  # [B, n * C, H, W]
+        coarse_output = self.base_net(x)  # [B, n * C, H, W]
 
         coarse_branches = torch.chunk(coarse_output, self.branch, dim=1)  # n * [B, C, H, W]
         coarse_output = {
-            f'sr_{i + 1}': coarse_branch
-            for i, coarse_branch in enumerate(coarse_branches)
-        } # dict { sr_{k} : [B, C, H, W] }
+            self.branch_names[i]: coarse_branches[i]
+            for i in range(self.branch)
+        }  # dict { <branch_name> : [B, C, H, W] }
 
-        refined_output: dict = self.refinement_net(coarse_branches) #  refined SR + other (e.g. Difficult Zone)
+        refined_output: dict = self.refinement_net(coarse_branches)  # refined SR + other (e.g. Difficult Zone)
 
         return {**coarse_output, **refined_output}
 
