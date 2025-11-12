@@ -42,7 +42,7 @@ def printable_results(
     formatter.header("# Metric", metric_names)
 
     for branch, branch_metric_results in metric_results.items():
-        formatter.row_unordered(f"Output {branch:10s}:", branch_metric_results)
+        formatter.row_unordered(f"Output {branch:15s}", branch_metric_results)
     if best_metric_results:  # best metric is only for primary output
         best_values = []
         best_iter = []
@@ -50,8 +50,8 @@ def printable_results(
             best_values.append(best_metric_results[metric_name]["val"])
             best_iter.append(best_metric_results[metric_name]["iter"])
         formatter.new_line()
-        formatter.row_ordered(f"Best Primary Output:", best_values)
-        formatter.row_ordered(f"Best Primary Iter  :", best_iter)
+        formatter.row_ordered(f"Best Primary Output", best_values)
+        formatter.row_ordered(f"Best Primary Iter   ", best_iter)
     formatter.new_line()
     result = formatter.result()
     return result
