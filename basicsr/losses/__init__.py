@@ -19,8 +19,6 @@ from .integrated_gan_losses import IntegratedGANLoss
 from .losses import (
     FourierLoss, BCELoss, BCEFocalLoss,
     DifficultZoneReconstructionNoiseLoss,
-    V0_Loss, V1_Loss, V2_Loss, V3_Loss, V5_Loss,
-    L1FourierGAN_MixedLoss, LFBG_MixedLoss, LFP_MixedLoss
 )
 from .mixed_loss import MixedLoss
 
@@ -34,8 +32,6 @@ __all__ = [
     'MixedLoss',
     'FourierLoss', 'BCEFocalLoss', 'BCELoss',
     'DifficultZoneReconstructionNoiseLoss',
-    'V0_Loss', 'V1_Loss', 'V2_Loss', 'V3_Loss', 'V5_Loss',
-    'L1FourierGAN_MixedLoss', 'LFBG_MixedLoss', 'LFP_MixedLoss',
     'IntegratedGANLoss'
 ]
 
