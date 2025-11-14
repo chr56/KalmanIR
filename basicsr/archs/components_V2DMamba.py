@@ -6,32 +6,8 @@ import torch.nn as nn
 
 from timm.models.layers import DropPath
 
-from .modules_common_ir import PatchUnEmbed, PatchEmbed
-from .modules_channel_attention import CAB
+from .components_MambaIR import PatchUnEmbed, PatchEmbed, CAB
 from .vmamba_2d.vmamba import SS2D as VSS2D
-from .vmamba_2d.vmamba import VSSM
-
-
-##########################################
-
-# using vmamba_2d
-class BackboneVSSM(VSSM):
-    def __init__(self, norm_layer: nn.Module, channel_first=True, **kwargs):
-        super().__init__(**kwargs)
-        del self.classifier
-        self.channel_first = channel_first
-        for i, dim in enumerate(self.dims):
-            self.add_module(name=f'output_norm_layer_{i}', module=norm_layer(dim))
-
-    def forward(self, x: torch.Tensor):
-        x = self.patch_embed(x)
-        for i, layer in enumerate(self.layers):
-            x = layer.blocks(x)
-            norm_layer = getattr(self, f'output_norm_layer_{i}')
-            x = norm_layer(x)
-        if self.channel_first:
-            x = x.permute(0, 3, 1, 2)
-        return x
 
 
 ##########################################
@@ -246,31 +222,3 @@ class ResidualGroup(nn.Module):
         flops += self.patch_unembed.flops()
 
         return flops
-
-##########################################
-
-# using vmamba_2d
-class VSS2ChanelFirst(VSS2D):
-    def __init__(self,
-                 d_model: int,
-                 d_state: int = 16,
-                 d_conv: int = 3,
-                 dropout_rate: float = 0,
-                 expand_ratio: float = 2.,
-                 channel_first: bool = True,
-                 **kwargs):
-        super().__init__(
-            d_model=d_model,
-            d_state=d_state,
-            ssm_ratio=expand_ratio,
-            act_layer=nn.SiLU,
-            d_conv=d_conv,
-            dropout=dropout_rate,
-            use_v2d=True,
-            initialize="v2",
-            forward_type="v05",
-            channel_first=channel_first,
-            feature_size=d_model,
-            **kwargs
-        )
-        self.v2d_out_norm = None

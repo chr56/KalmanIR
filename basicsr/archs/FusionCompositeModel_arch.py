@@ -8,7 +8,7 @@ from basicsr.utils.registry import ARCH_REGISTRY
 
 
 @ARCH_REGISTRY.register()
-class CompositeModel(nn.Module):
+class FusionCompositeModel(nn.Module):
 
     def __init__(self,
                  upscale: int = 4,
@@ -18,9 +18,9 @@ class CompositeModel(nn.Module):
                  base_model: Dict[str, Any] = None,
                  refinement_model: Dict[str, Any] = None,
                  **kwargs):
-        super(CompositeModel, self).__init__()
+        super(FusionCompositeModel, self).__init__()
 
-        from basicsr.archs.base import build_base_network
+        from basicsr.archs import build_network
         from basicsr.archs.refinement import build_refinement_network
         base_model.update(upscale=upscale, branch=branch, channels=channels)
         refinement_model.update(upscale=upscale, branch=branch, channels=channels)
@@ -32,7 +32,7 @@ class CompositeModel(nn.Module):
         self.branch_names = branch_names if branch_names is not None else [f"sr_{i + 1}" for i in range(branch)]
         assert len(self.branch_names) == self.branch, "`branch_names` size must be equal to `branch`"
 
-        self.base_net: nn.Module = build_base_network(base_model)
+        self.base_net: nn.Module = build_network(base_model)
         self.refinement_net: nn.Module = build_refinement_network(refinement_model)
 
         self.apply(init_weights)
@@ -62,7 +62,7 @@ class CompositeModel(nn.Module):
         return {**coarse_output, **refined_output}
 
     def model_output_format(self):
-        format_base_model = {f'sr_{i + 1}': 'I' for i in range(self.branch)}
+        format_base_model = {self.branch_names[i]: 'I' for i in range(self.branch)}
         format_refinement_net = self.refinement_net.model_output_format()
 
         return {

@@ -3,13 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from basicsr.archs.arch_util import init_weights
-from . import BASE_ARCH_REGISTRY
-
-from ..modules_mamba import BasicLayer
-from ..modules_common_ir import PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep
+from basicsr.utils.registry import ARCH_REGISTRY
 
 
-@BASE_ARCH_REGISTRY.register()
+@ARCH_REGISTRY.register()
 class MultiBranchMambaIR(nn.Module):
     """ Multiple branch output version of MambaIR.
 
@@ -51,6 +48,11 @@ class MultiBranchMambaIR(nn.Module):
                  upsampler='',
                  resi_connection='1conv',
                  **kwargs):
+        from .components_MambaIR import (
+            PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep,
+        )
+        from .components_MambaIR import ResidualGroup
+
         super(MultiBranchMambaIR, self).__init__()
         num_in_ch = channel
         num_out_ch = channel * branch
@@ -106,9 +108,6 @@ class MultiBranchMambaIR(nn.Module):
 
         # build Residual State Space Group (RSSG)
         self.layers = nn.ModuleList()
-        # self.decodes = nn.ModuleList()
-        # self.upsamples = nn.ModuleList()
-
         for i_layer in range(self.num_layers):  # 6-layer
             layer = ResidualGroup(
                 dim=embed_dim,
@@ -134,13 +133,11 @@ class MultiBranchMambaIR(nn.Module):
         elif resi_connection == '3conv':
             # to save parameters and memory
             self.conv_after_body = nn.Sequential(
-
                 nn.Conv2d(embed_dim, embed_dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
                 nn.Conv2d(embed_dim // 4, embed_dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
                 nn.Conv2d(embed_dim // 4, embed_dim, 3, 1, 1))
 
         # -------------------------3. high-quality image reconstruction ------------------------ #
-        # self.downsample = nn.AvgPool2d(kernel_size=self.upscale, stride=self.upscale)
         if self.upsampler == 'pixelshuffle':
             # for classical SR
             self.conv_before_upsample = nn.Sequential(
@@ -172,6 +169,7 @@ class MultiBranchMambaIR(nn.Module):
 
         for layer in self.layers:
             x = layer(x, x_size)
+
         x = self.norm(x)  # b seq_len c
         x = self.patch_unembed(x, x_size)
 
@@ -220,82 +218,4 @@ class MultiBranchMambaIR(nn.Module):
             flops += layer.flops()
         flops += h * w * 3 * self.embed_dim * self.embed_dim
         flops += self.upsample.flops()
-        return flops
-
-
-class ResidualGroup(nn.Module):
-    """Residual State Space Group (RSSG).
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-        img_size: Input image size.
-        patch_size: Patch size.
-        resi_connection: The convolutional block before residual connection.
-    """
-
-    def __init__(self,
-                 dim,
-                 input_resolution,
-                 depth,
-                 d_state=16,
-                 mlp_ratio=4.,
-                 drop_path=0.,
-                 norm_layer=nn.LayerNorm,
-                 downsample=None,
-                 use_checkpoint=False,
-                 img_size=None,
-                 patch_size=None,
-                 resi_connection='1conv',
-                 is_light_sr=False):
-        super(ResidualGroup, self).__init__()
-
-        self.dim = dim
-        self.input_resolution = input_resolution  # [64, 64]
-
-        self.residual_group = BasicLayer(
-            dim=dim,
-            input_resolution=input_resolution,
-            depth=depth,
-            d_state=d_state,
-            mlp_ratio=mlp_ratio,
-            drop_path=drop_path,
-            norm_layer=norm_layer,
-            downsample=downsample,
-            use_checkpoint=use_checkpoint,
-            is_light_sr=is_light_sr)
-
-        # build the last conv layer in each residual state space group
-        if resi_connection == '1conv':
-            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
-        elif resi_connection == '3conv':
-            # to save parameters and memory
-            self.conv = nn.Sequential(
-                nn.Conv2d(dim, dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim, 3, 1, 1))
-
-        self.patch_embed = PatchEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-        self.patch_unembed = PatchUnEmbed(
-            img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
-
-    def forward(self, x, x_size):
-        return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size), x_size))) + x
-
-    def flops(self):
-        flops = 0
-        flops += self.residual_group.flops()
-        h, w = self.input_resolution
-        flops += h * w * self.dim * self.dim * 9
-        flops += self.patch_embed.flops()
-        flops += self.patch_unembed.flops()
-
         return flops

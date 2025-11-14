@@ -3,13 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from basicsr.archs.arch_util import init_weights
-from . import BASE_ARCH_REGISTRY
-
-from ..modules_mamba import BasicLayer
-from ..modules_common_ir import PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep
+from basicsr.utils.registry import ARCH_REGISTRY
 
 
-@BASE_ARCH_REGISTRY.register()
+@ARCH_REGISTRY.register()
 class MultiBranchV2DMamba(nn.Module):
     """ Multiple branch output version of MambaIR.
 
@@ -51,10 +48,16 @@ class MultiBranchV2DMamba(nn.Module):
                  upsampler='',
                  resi_connection='1conv',
                  **kwargs):
+        from .components_MambaIR import (
+            PatchEmbed, PatchUnEmbed, Upsample, UpsampleOneStep,
+        )
+        from .components_V2DMamba import ResidualGroup
+
         super(MultiBranchV2DMamba, self).__init__()
         num_in_ch = channel
         num_out_ch = channel * branch
         num_feat = 64
+        self.branch = branch
 
         self.norm_image = norm_image
         self.img_range = img_range
@@ -108,7 +111,6 @@ class MultiBranchV2DMamba(nn.Module):
         # self.decodes = nn.ModuleList()
         # self.upsamples = nn.ModuleList()
 
-        from ..modules_v2dmamba import ResidualGroup
         for i_layer in range(self.num_layers):  # 6-layer
             layer = ResidualGroup(
                 dim=embed_dim,
@@ -153,8 +155,6 @@ class MultiBranchV2DMamba(nn.Module):
         else:
             # for image denoising
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
-            if num_in_ch != num_out_ch:
-                self.conv_resi = nn.Conv2d(num_in_ch, num_out_ch, 3, 1, 1)
 
         self.apply(init_weights)
 
@@ -179,7 +179,7 @@ class MultiBranchV2DMamba(nn.Module):
 
         return x
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         # input shape [B, C, H, W]
 
         if self.norm_image:
@@ -204,7 +204,7 @@ class MultiBranchV2DMamba(nn.Module):
             x_in = x
             x = self.conv_first(x)
             x = self.conv_after_body(self.forward_features(x)) + x
-            x = self.conv_last(x) + self.conv_resi(x_in)
+            x = self.conv_last(x) + x_in.repeat(1, self.branch, 1, 1)
             x = x.contiguous()
 
         if self.norm_image:
@@ -223,4 +223,3 @@ class MultiBranchV2DMamba(nn.Module):
         flops += h * w * 3 * self.embed_dim * self.embed_dim
         flops += self.upsample.flops()
         return flops
-
