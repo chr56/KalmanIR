@@ -24,11 +24,11 @@ from .util_config import read_optimizer_options
 
 
 @MODEL_REGISTRY.register()
-class MultiBranchSRModel(BaseModel):
+class MultiBranchIRModel(BaseModel):
     """SR model for single image super-resolution, supporting multiple outputs architecture."""
 
     def __init__(self, opt):
-        super(MultiBranchSRModel, self).__init__(opt)
+        super(MultiBranchIRModel, self).__init__(opt)
 
         # define network
         self.net_g = build_network(opt['network_g'])
