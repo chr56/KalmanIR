@@ -1,5 +1,3 @@
-from typing import List
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -40,6 +38,10 @@ class KalmanPredictorV1(nn.Module):
         x = self.conv_block_3(x)
         return x
 
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV1a(nn.Module):
@@ -53,7 +55,7 @@ class KalmanPredictorMambaRecursiveV1a(nn.Module):
 
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.channels = channels
         self.num_images = num_images
@@ -82,6 +84,10 @@ class KalmanPredictorMambaRecursiveV1a(nn.Module):
         current = torch.sin_(current)
         return current
 
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV1b(nn.Module):
@@ -95,7 +101,7 @@ class KalmanPredictorMambaRecursiveV1b(nn.Module):
 
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.channels = channels
         self.num_images = num_images
@@ -124,6 +130,10 @@ class KalmanPredictorMambaRecursiveV1b(nn.Module):
         current = torch.sin_(current)
         return current
 
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV1c(nn.Module):
@@ -138,7 +148,7 @@ class KalmanPredictorMambaRecursiveV1c(nn.Module):
         from .residual_conv_block import ResidualConvBlock
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.conv_previous = ResidualConvBlock(
             in_channels=channels, out_channels=channels,
@@ -172,6 +182,10 @@ class KalmanPredictorMambaRecursiveV1c(nn.Module):
         current = torch.sin_(current)
         return current
 
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV2a(nn.Module):
@@ -185,7 +199,7 @@ class KalmanPredictorMambaRecursiveV2a(nn.Module):
 
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.channels = channels
         self.num_images = num_images
@@ -214,6 +228,10 @@ class KalmanPredictorMambaRecursiveV2a(nn.Module):
         current = torch.sin_(current)
         return current
 
+    @staticmethod
+    def model_input_format():
+        return ['previous', 'current']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV2b(nn.Module):
@@ -227,7 +245,7 @@ class KalmanPredictorMambaRecursiveV2b(nn.Module):
 
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.channels = channels
         self.num_images = num_images
@@ -256,6 +274,10 @@ class KalmanPredictorMambaRecursiveV2b(nn.Module):
         current = torch.sin_(current)
         return current
 
+    @staticmethod
+    def model_input_format():
+        return ['previous', 'current']
+
 
 @MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV2c(nn.Module):
@@ -270,7 +292,7 @@ class KalmanPredictorMambaRecursiveV2c(nn.Module):
         from .residual_conv_block import ResidualConvBlock
         from .layer_norm import LayerNorm2d
         from .utils_calculation import cal_kl
-        from ..modules_mamba import SS2DChanelFirst
+        from .modules_ss2d import SS2DChanelFirst
 
         self.conv_first = ResidualConvBlock(
             in_channels=channels, out_channels=channels,
@@ -303,3 +325,7 @@ class KalmanPredictorMambaRecursiveV2c(nn.Module):
 
         current = torch.sin_(current)
         return current
+
+    @staticmethod
+    def model_input_format():
+        return ['previous', 'current']
