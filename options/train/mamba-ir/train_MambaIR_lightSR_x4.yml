@@ -1,7 +1,7 @@
 # general settings for image SR training
-name: MambaIR_lightSR_x2
+name: MambaIR_lightSR_x4_pre_batchsize8
 model_type: MambaIRModel
-scale: 2
+scale: 4
 num_gpu: 2
 manual_seed: 10
 
@@ -12,51 +12,83 @@ datasets:
     name: DF2K
     type: PairedImageDataset
     dataroot_gt:
-      - /apdcephfs_cq10/share_1275055/lijinmin/datasets/DIV2K/HR
+      - datasets/DF2K/train_HR
     dataroot_lq:
-      - /apdcephfs_cq10/share_1275055/lijinmin/datasets/DIV2K/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+      - datasets/DF2K/train_LR_bicubic/X4
+    filename_tmpl: '{}x4'
     io_backend:
       type: disk
 
-    gt_size: 128
+    gt_size: 192
     use_hflip: true
     use_rot: true
 
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 32
-    batch_size_per_gpu: 16
+    batch_size_per_gpu: 8
     dataset_enlarge_ratio: 100
     prefetch_mode: ~
 
   val:
+    name: Set5
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_2:
+    name: Set14
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_3:
+    name: BSDS100
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_4:
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: /apdcephfs_cq10/share_1275055/lijinmin/datasets/IRdatasets/SR/Urban100/HR
-    dataroot_lq: /apdcephfs_cq10/share_1275055/lijinmin/datasets/IRdatasets/SR/Urban100/LR_bicubic/X2
-    filename_tmpl: '{}x2'
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_5:
+    name: Manga109
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
+    filename_tmpl: '{}'
     io_backend:
       type: disk
 
 # network structures
 network_g:
   type: MambaIR
-  upscale: 2
+  upscale: 4
   in_chans: 3
   img_size: 64
   img_range: 1.
-  d_state: 16
+  d_state: 10
   depths: [6, 6, 6, 6]
   embed_dim: 60
-  mlp_ratio: 1.5
+  mlp_ratio: 1.2
   upsampler: 'pixelshuffledirect'
   resi_connection: '1conv'
 
 # path
 path:
   pretrain_network_g: ~
-  strict_load_g: true
+  strict_load_g: false
   resume_state: ~
 
 # training settings
@@ -71,7 +103,6 @@ train:
   scheduler:
     type: MultiStepLR
     milestones: [250000, 400000, 450000, 475000]
-    #milestones: [5000, 10000, 15000, 20000，25000，30000，35000]
     gamma: 0.5
 
   total_iter: 500000
@@ -90,8 +121,13 @@ val:
   metrics:
     psnr: # metric name, can be arbitrary
       type: calculate_psnr
-      crop_border: 2
+      crop_border: 4
       test_y_channel: true
+    ssim:
+      type: calculate_ssim
+      crop_border: 4
+      test_y_channel: true
+
 
 
 

@@ -1,6 +1,6 @@
 # general settings for image SR training
 name: MambaIR_lightSR_x3_pre #SAMIR_SR_x3
-model_type: MambaIRModel #SAMIRModel
+model_type: MambaIRModel
 scale: 3
 num_gpu: 2
 manual_seed: 10
@@ -47,12 +47,12 @@ network_g:
   img_size: 64
   window_size: 8
   img_range: 1.
-  d_state: 16
+  d_state: 10
   depths: [6, 6, 6, 6]
   interval: [4, 4, 4, 4]
   embed_dim: 60
   num_heads: [6, 6, 6, 6]
-  mlp_ratio: 1.5
+  mlp_ratio: 1.2
   upsampler: 'pixelshuffledirect'
   resi_connection: '1conv'
 
