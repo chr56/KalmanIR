@@ -264,7 +264,7 @@ class MultiBranchMambaIRV2(nn.Module):
             x = x.contiguous()
 
         if self.norm_image:
-            x = x / self.img_range + self.mean
+            x = x / self.img_range + self.mean.repeat(1, self.branch, 1, 1)
 
         # unpadding
         x = x[..., :h_ori * self.upscale, :w_ori * self.upscale]
