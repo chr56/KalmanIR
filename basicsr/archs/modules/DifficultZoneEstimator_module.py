@@ -22,17 +22,22 @@ class DifficultZoneEstimatorV1(nn.Module):
 
         from .residual_conv_block import ResidualConvBlock
         diff_metric_methods = 2
-        in_channel_main = num_images * channels * diff_metric_methods
         self.main_block1 = ResidualConvBlock(
-            in_channels=in_channel_main, out_channels=channels,
-            activation_type='silu', norm_type='group', norm_group=num_images,
+            in_channels=channels * num_images * diff_metric_methods, out_channels=channels * num_images,
+            activation_type='silu', norm_type='group', norm_group=[num_images * diff_metric_methods, num_images],
         )
         self.main_block2 = ResidualConvBlock(
-            in_channels=channels, out_channels=channels,
+            in_channels=channels * num_images, out_channels=channels,
             activation_type='silu', norm_type='layer',
         )
-        in_channel_side = num_images * channels
-        self.liner_avg = nn.Conv2d(in_channel_side, channels, kernel_size=1, padding='same')
+        self.liner1 = nn.Conv2d(
+            num_images * channels, num_images * channels,
+            kernel_size=1, padding='same'
+        )
+        self.liner2 = nn.Conv2d(
+            num_images * channels, channels,
+            kernel_size=1, padding='same'
+        )
 
     def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
         """
@@ -60,9 +65,11 @@ class DifficultZoneEstimatorV1(nn.Module):
         x = self.main_block2(x)
 
         y = ae_differences
-        y = self.liner_avg(y)
-        y = F.sigmoid(y)
+        y = self.liner1(y)
+        y = nn.functional.leaky_relu(y)
+        y = self.liner2(y)
+        y = torch.sigmoid(y)
 
         difficult_zone = x + y
 
-        return difficult_zone
+        return torch.sigmoid(difficult_zone)
