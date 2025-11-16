@@ -1,4 +1,4 @@
-from typing import Union, Tuple, Sequence
+from typing import Union, Tuple, Sequence, Dict, Any
 
 import torch
 from torch import nn
@@ -126,13 +126,18 @@ class FourierWrapper(nn.Module):
 
 @LOSS_REGISTRY.register()
 class DifficultZoneReconstructionNoiseLoss(nn.Module):
-    def __init__(self, loss_weight=1.0, reduction='mean', mode: str = 'l1'):
+    def __init__(self,
+                 loss_weight: float = 1.0,
+                 reduction: str = 'mean',
+                 mode: str = 'l1',
+                 preprocess: str = 'none',
+                 **kwargs,
+                 ):
         super(DifficultZoneReconstructionNoiseLoss, self).__init__()
-        if reduction not in ['none', 'mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
-
         self.loss_weight = loss_weight
         self.reduction = reduction
+
+        self.mode = mode
         if mode == 'l1':
             self.loss_fn = L1Loss(reduction=self.reduction)
         elif mode == 'l2' or mode == 'mse':
@@ -142,17 +147,36 @@ class DifficultZoneReconstructionNoiseLoss(nn.Module):
         elif mode == 'fourier':
             self.loss_fn = FourierLoss(reduction=self.reduction)
         else:
-            raise ValueError(f'Unsupported reduction mode: {reduction}.')
+            raise ValueError(f'Unsupported mode: {mode}.')
 
-    def forward(self,
-                pred: Tuple[torch.Tensor, torch.Tensor],
-                target: torch.Tensor,
-                weight=None, **kwargs):
-        difficult_zone = pred[0]
-        image_sr = pred[1]
-        image_hr = target
+        self.preprocess = preprocess
+        assert preprocess in _SUPPORTED_PREPROCESS, f"Unsupported preprocess: {self.preprocess}."
 
-        noise = torch.abs(image_sr - image_hr)
-        loss = self.loss_fn(difficult_zone, noise, weight)
+    def preprocess_residual(self, item: torch.Tensor):
+        if self.preprocess == 'none':
+            return item
+        elif self.preprocess == 'sin':
+            return torch.sin(item)
+        elif self.preprocess == 'sigmoid':
+            return torch.sigmoid(item)
+        elif self.preprocess == 'tanh':
+            return torch.tanh(item)
+        elif self.preprocess == 'layer_norm':
+            from basicsr.archs.modules.layer_norm import layer_norm_2d
+            return layer_norm_2d(item, (item.shape[1],))
+        else:
+            raise ValueError(f"Unsupported preprocess: {self.preprocess}.")
+
+    def forward(self, bundle: Dict[str, Any], **kwargs):
+        difficult_zone = bundle['difficult_zone']
+        image_sr = bundle['sr_refined']
+        image_hr = bundle['gt']
+
+        residual = torch.abs(image_sr - image_hr)
+        residual = self.preprocess_residual(residual)
+        loss = self.loss_fn(difficult_zone, residual)
 
         return self.loss_weight * loss
+
+
+_SUPPORTED_PREPROCESS = ['none', 'sigmoid', 'tanh', 'sin', 'layer_norm']
