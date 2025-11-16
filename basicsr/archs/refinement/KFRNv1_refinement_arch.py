@@ -5,7 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from basicsr.archs.modules import build_module
+from basicsr.archs.modules.layer_norm import LayerNorm2d
 from basicsr.archs.refinement import REFINEMENT_ARCH_REGISTRY
+
+SUPPORTED_PREPROCESS = ['none', 'sigmoid', 'tanh', 'sin', 'layer_norm']
 
 
 @REFINEMENT_ARCH_REGISTRY.register()
@@ -21,6 +24,7 @@ class KFRNv1(nn.Module):
             **kwargs,
     ):
         super(KFRNv1, self).__init__()
+        assert preprocess in SUPPORTED_PREPROCESS, f"unknown pre-process type: {preprocess}"
         difficult_zone_estimator.update(channels=channels, num_images=branch)
         kalman_gain_calculator.update(channels=channels, num_images=branch)
         kalman_predictor.update(channels=channels, num_images=branch)
@@ -32,12 +36,21 @@ class KFRNv1(nn.Module):
         self.kalman_predictor: nn.Module = build_module(kalman_predictor)
 
         self.preprocess = preprocess
+        if self.preprocess == 'layer_norm':
+            affine = kwargs.get('preprocess_layer_norm_affine', True)
+            self.layer_norm = LayerNorm2d(channels, eps=1e-6, elementwise_affine=affine)
+
         self.kalman_predictor_argument_size = len(self.kalman_predictor.model_input_format())
-        assert self.preprocess in ['none', 'sin'], f"unknown pre-process type: {preprocess}"
 
     def preprocess_images(self, images: List[torch.Tensor]):
         if self.preprocess == 'sin':
             return [torch.sin(image) for image in images]
+        elif self.preprocess == 'tanh':
+            return [torch.tanh(image) for image in images]
+        elif self.preprocess == 'sigmoid':
+            return [torch.sigmoid(image) for image in images]
+        elif self.preprocess == 'layer_norm':
+            return [self.layer_norm(image) for image in images]
         else:
             return images
 
