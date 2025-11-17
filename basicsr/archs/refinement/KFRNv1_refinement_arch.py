@@ -21,6 +21,7 @@ class KFRNv1(nn.Module):
             kalman_gain_calculator: Dict[str, Any],
             kalman_predictor: Dict[str, Any],
             preprocess: str = 'none',
+            rgb_mean_norm: bool = False,
             **kwargs,
     ):
         super(KFRNv1, self).__init__()
@@ -40,9 +41,18 @@ class KFRNv1(nn.Module):
             affine = kwargs.get('preprocess_layer_norm_affine', True)
             self.layer_norm = LayerNorm2d(channels, eps=1e-6, elementwise_affine=affine)
 
+        self.rgb_mean_norm = rgb_mean_norm
+        if self.rgb_mean_norm:
+            rgb_mean = kwargs.get('rgb_mean', (0.4488, 0.4371, 0.4040))
+            self.mean = torch.Tensor(rgb_mean).view(1, len(rgb_mean), 1, 1)
+
         self.kalman_predictor_argument_size = len(self.kalman_predictor.model_input_format())
 
     def preprocess_images(self, images: List[torch.Tensor]):
+        if self.rgb_mean_norm:
+            self.mean = self.mean.type_as(images[0])
+            images = [(image - self.mean) for image in images]
+
         if self.preprocess == 'sin':
             return [torch.sin(image) for image in images]
         elif self.preprocess == 'tanh':
@@ -68,6 +78,9 @@ class KFRNv1(nn.Module):
             predictor=self.kalman_predictor,
             predictor_input_count=self.kalman_predictor_argument_size,
         )
+
+        if self.rgb_mean_norm:
+            refined = refined + self.mean
 
         return {
             'sr_refined': refined,  # [B, C, H, W]
