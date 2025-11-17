@@ -22,7 +22,7 @@ class FusionCompositeModel(nn.Module):
 
         from basicsr.archs import build_network
         from basicsr.archs.refinement import build_refinement_network
-        base_model.update(upscale=upscale, branch=branch, channels=channels)
+        base_model.update(upscale=upscale, branch=branch, channel=channels)
         refinement_model.update(upscale=upscale, branch=branch, channels=channels)
 
         self.upscale = upscale
