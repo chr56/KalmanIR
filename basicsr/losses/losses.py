@@ -169,7 +169,7 @@ class DifficultZoneReconstructionNoiseLoss(nn.Module):
 
     def forward(self, bundle: Dict[str, Any], **kwargs):
         difficult_zone = bundle['difficult_zone']
-        image_sr = bundle['sr_refined']
+        image_sr = bundle['sr_refined'].detach()
         image_hr = bundle['gt']
 
         residual = torch.abs(image_sr - image_hr)
