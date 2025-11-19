@@ -154,6 +154,23 @@ def imwrite(img, file_path, params=None, auto_mkdir=True):
     if not ok:
         raise IOError('Failed in writing images.')
 
+def calculate_and_padding_image_no_overlapping(img, patch_size=128):
+    _, _, raw_h, raw_w = img.size()
+
+    num_patch_h = raw_h // patch_size  # number of horizontal cut sections
+    num_patch_w = raw_w // patch_size  # number of vertical cut sections
+
+    # padding
+    padding_h, padding_w = 0, 0
+    if raw_h % patch_size != 0:
+        num_patch_h += 1
+        padding_h = num_patch_h * patch_size - raw_h
+    if raw_w % patch_size != 0:
+        num_patch_w += 1
+        padding_w = num_patch_w * patch_size - raw_w
+    img = torch.nn.functional.pad(img, (0, padding_w, 0, padding_h), 'reflect')
+
+    return img, num_patch_h, num_patch_w, padding_h, padding_w
 
 def calculate_and_padding_image(img, patch_size=200):
     _, _, raw_h, raw_w = img.size()
