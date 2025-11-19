@@ -79,6 +79,20 @@ class MultiBranchIRModel(BaseModel):
 
             # set up gradient clipping
             self.grad_clip_max_norm = train_opt.get('grad_clip_max_norm', None)
+
+            # frozen parameters
+            target_frozen_parameters_groups: list[str] = train_opt.get('frozen_parameters', [])
+            if target_frozen_parameters_groups and hasattr(self.net_g, 'partitioned_parameters'):
+                existed_parameters = self.net_g.partitioned_parameters()
+                for target in target_frozen_parameters_groups:
+                    params = existed_parameters.get(target, None)
+                    if params is not None:
+                        logger.info(f"Frozen parameters group {target} ...")
+                        for p in params:
+                            p.requires_grad = False
+                    else:
+                        raise ValueError(f"Parameters group {target} does not exist! ")
+                pass
             pass
 
         self.log_dict = None
