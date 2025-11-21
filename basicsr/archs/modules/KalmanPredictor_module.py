@@ -44,6 +44,59 @@ class KalmanPredictorV1(nn.Module):
 
 
 @MODULES_REGISTRY.register()
+class KalmanPredictorMambaDirectV1(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            num_layer: int = 2,
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        self.num_layer = num_layer
+
+        self.layers = nn.ModuleList()
+        for _ in range(num_layer):
+            self.layers.append(
+                self._make_layer(channels)
+            )
+
+    def _make_layer(self, channels: int) -> nn.Sequential:
+        from .layer_norm import LayerNorm2d
+        from .modules_ss2d import SS2DChanelFirst
+
+        layer_norm_ss2d = LayerNorm2d(channels)
+        ss2d = SS2DChanelFirst(d_model=channels)
+        layer_norm_linear = LayerNorm2d(channels)
+        linear_1 = nn.Conv2d(channels, channels, kernel_size=1, padding='same')
+        activ_1 = nn.LeakyReLU()
+        linear_2 = nn.Conv2d(channels, channels, kernel_size=1, padding='same')
+
+        layer = nn.Sequential(
+            layer_norm_ss2d,
+            ss2d,
+            layer_norm_linear,
+            linear_1,
+            activ_1,
+            linear_2,
+        )
+        return layer
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        x = image
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
+
+@MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV1a(nn.Module):
     def __init__(
             self,
