@@ -17,13 +17,14 @@ class FusionCompositeModel(nn.Module):
                  branch_names: List[str] = None,
                  base_model: Dict[str, Any] = None,
                  refinement_model: Dict[str, Any] = None,
+                 img_range: float = 1.0,
                  **kwargs):
         super(FusionCompositeModel, self).__init__()
 
         from basicsr.archs import build_network
         from basicsr.archs.refinement import build_refinement_network
-        base_model.update(upscale=upscale, branch=branch, channel=channels)
-        refinement_model.update(upscale=upscale, branch=branch, channels=channels)
+        base_model.update(upscale=upscale, branch=branch, channel=channels, img_range=img_range)
+        refinement_model.update(upscale=upscale, branch=branch, channels=channels, img_range=img_range)
 
         self.upscale = upscale
 

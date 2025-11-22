@@ -12,10 +12,10 @@ network_g:
   channels: 3 # Input Image Channel
   branch: 3 # Branches
   branch_names: ['sr_spatial', 'sr_frequential', 'sr_gan']
+  img_range: 1.
   base_model:
     type: MultiBranchMambaIR
     img_size: 32
-    img_range: 1.
     depths: [ 3, 3, 4, 4, 3, 3 ]
     d_state: 16
     embed_dim: 144

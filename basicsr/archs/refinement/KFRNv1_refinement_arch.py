@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from basicsr.archs.arch_util import ImageNormalization
 from basicsr.archs.modules import build_module
 from basicsr.archs.modules.layer_norm import LayerNorm2d
 from basicsr.archs.refinement import REFINEMENT_ARCH_REGISTRY
@@ -21,7 +22,8 @@ class KFRNv1(nn.Module):
             kalman_gain_calculator: Dict[str, Any],
             kalman_predictor: Dict[str, Any],
             preprocess: str = 'none',
-            rgb_mean_norm: bool = False,
+            norm_image: bool = False,
+            img_range: float = 1.0,
             **kwargs,
     ):
         super(KFRNv1, self).__init__()
@@ -41,18 +43,17 @@ class KFRNv1(nn.Module):
             affine = kwargs.get('preprocess_layer_norm_affine', True)
             self.layer_norm = LayerNorm2d(channels, eps=1e-6, elementwise_affine=affine)
 
-        self.rgb_mean_norm = rgb_mean_norm
-        if self.rgb_mean_norm:
-            rgb_mean = kwargs.get('rgb_mean', (0.4488, 0.4371, 0.4040))
-            self.mean = torch.Tensor(rgb_mean).view(1, len(rgb_mean), 1, 1)
+        self.norm_image = norm_image or kwargs.get('rgb_mean_norm', False)
+        if self.norm_image:
+            self.image_norm = ImageNormalization(
+                channel=channels,
+                img_range=img_range,
+                mean=kwargs.get('rgb_mean', (0.4488, 0.4371, 0.4040)),
+            )
 
         self.kalman_predictor_argument_size = len(self.kalman_predictor.model_input_format())
 
     def preprocess_images(self, images: List[torch.Tensor]):
-        if self.rgb_mean_norm:
-            self.mean = self.mean.type_as(images[0])
-            images = [(image - self.mean) for image in images]
-
         if self.preprocess == 'sin':
             return [torch.sin(image) for image in images]
         elif self.preprocess == 'tanh':
@@ -66,6 +67,10 @@ class KFRNv1(nn.Module):
 
     def forward(self, images: List[torch.Tensor]) -> dict:
         # Input shape L * [B, C, H, W]
+
+        if self.norm_image:
+            images = [self.image_norm(image) for image in images]
+
         images = torch.stack(self.preprocess_images(images), dim=1)  # [B, L, C, H, W]
 
         difficult_zone = self.difficult_zone_estimator(images)  # [B, C, H, W]
@@ -79,8 +84,8 @@ class KFRNv1(nn.Module):
             predictor_input_count=self.kalman_predictor_argument_size,
         )
 
-        if self.rgb_mean_norm:
-            refined = refined + self.mean
+        if self.norm_image:
+            refined = self.image_norm.recover(refined)
 
         return {
             'sr_refined': refined,  # [B, C, H, W]
