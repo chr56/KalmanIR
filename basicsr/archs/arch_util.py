@@ -43,9 +43,11 @@ def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
                 if m.bias is not None:
                     m.bias.data.fill_(bias_fill)
 
+
 def init_all_weights(root_module: nn.Module):
     for module in root_module.modules():
         init_weights(module)
+
 
 @torch.no_grad()
 def init_weights(module: nn.Module):
@@ -67,6 +69,38 @@ def init_weights(module: nn.Module):
             init.constant_(module.weight, 1)
         if module.bias is not None:
             module.bias.data.fill_(0)
+
+
+class ImageNormalization(nn.Module):
+    def __init__(self,
+                 channel: int = 3,
+                 img_range: float = 1.0,
+                 mean=None,
+                 ):
+        super(ImageNormalization, self).__init__()
+
+        self.channel = channel
+        self.img_range = img_range
+
+        if mean is None:
+            if channel == 3:
+                mean = (0.4488, 0.4371, 0.4040)  # RGB
+            elif channel == 1:
+                mean = 0  # Grey
+            else:
+                raise ValueError(f'mean value is not defined!')
+
+        self.mean = torch.Tensor(mean)
+        self.mean = self.mean.reshape(1, self.channel, 1, 1)
+
+    def forward(self, x):
+        self.mean = self.mean.type_as(x)
+        x = (x - self.mean) / self.img_range
+        return x
+
+    def recover(self, x, repeat: int = 1):
+        x = x / self.img_range + self.mean.repeat(1, repeat, 1, 1)
+        return x
 
 
 def make_layer(basic_block, num_basic_block, **kwarg):
