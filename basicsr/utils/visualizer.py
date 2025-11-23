@@ -6,11 +6,12 @@ class Visualizer:
     def __init__(self,
                  implementation: str = 'torchvision',
                  root_directory: str = 'results/image_visualizations',
+                 name: str = None,
                  time_format: str = '%Y%m%d-%H%M%S',
                  mkdir: bool = True,
                  ):
         from datetime import datetime
-        self.runs = datetime.now().strftime(time_format)
+        self.runs = name or datetime.now().strftime(time_format)
         self.root_directory = root_directory
 
         self.directory = f"{self.root_directory}/{self.runs}"
