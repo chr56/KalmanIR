@@ -97,6 +97,64 @@ class KalmanPredictorMambaDirectV1(nn.Module):
 
 
 @MODULES_REGISTRY.register()
+class KalmanPredictorSimpleMambaV1(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            num_layer: int = 2,
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        self.num_layer = num_layer
+
+        self.dim_expand = self.channels * 12
+        self.linear_expand = nn.Conv2d(
+            self.channels, self.dim_expand, kernel_size=3, padding='same'
+        )
+        self.linear_shrink = nn.Conv2d(
+            self.dim_expand, self.channels, kernel_size=3, padding='same'
+        )
+
+        self.layers = nn.ModuleList()
+        for _ in range(num_layer):
+            self.layers.append(
+                self._make_layer(self.dim_expand)
+            )
+
+    def _make_layer(self, channels: int) -> nn.Sequential:
+        from .modules_ss2d import SS2DChanelFirst
+
+        channels_group = channels // 6
+
+        norm_ss2d = nn.GroupNorm(channels_group, channels)
+        ss2d = SS2DChanelFirst(
+            d_model=channels, d_state=8, dt_rank=channels_group
+        )
+
+        layer = nn.Sequential(
+            norm_ss2d,
+            ss2d,
+        )
+        return layer
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        x = image
+        x = self.linear_expand(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.linear_shrink(x)
+        return x
+
+    @staticmethod
+    def model_input_format():
+        return ['image']
+
+
+@MODULES_REGISTRY.register()
 class KalmanPredictorMambaRecursiveV1a(nn.Module):
     def __init__(
             self,
