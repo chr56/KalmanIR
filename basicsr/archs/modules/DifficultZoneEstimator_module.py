@@ -215,6 +215,89 @@ class DifficultZoneEstimatorV3base(nn.Module):
 
 
 @MODULES_REGISTRY.register()
+class DifficultZoneEstimatorV3avg(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            merge_ratio: float = 1.0,
+            final_transform: str = 'none',
+            expand: int = 8,
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        self.merge_ratio = merge_ratio
+        self.expand = expand
+        self.final_transform = final_transform
+
+        from .residual_conv_block import ResidualConvBlock
+        difference_methods = 2
+        ch_layer_0 = channels * difference_methods
+        ch_layer_1 = channels * difference_methods * self.expand
+        ch_layer_2 = channels * self.expand
+        ch_layer_3 = channels
+        self.conv_block_0 = ResidualConvBlock(
+            in_channels=ch_layer_0, out_channels=ch_layer_1, num_layers=2,
+            activation_type='leaky_relu', norm_type='group', norm_group=difference_methods,
+        )
+        self.conv_block_1 = ResidualConvBlock(
+            in_channels=ch_layer_1, out_channels=ch_layer_2, num_layers=3,
+            activation_type='silu', norm_type='group', norm_group=self.expand,
+        )
+        self.conv_block_2 = ResidualConvBlock(
+            in_channels=ch_layer_2, out_channels=ch_layer_3, num_layers=2,
+            activation_type='silu', norm_type='layer',
+        )
+
+    def _calculate_avg_difference(self, images: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        ae_differences = []  # L * [B, C, H, W]
+        bce_differences = []  # L * [B, C, H, W]
+        for i in range(self.num_images):
+            img1 = images[:, i, ...]
+            img2 = images[:, i - 1, ...]
+            ae_differences.append(
+                cal_ae(img1, img2)
+            )
+            bce_differences.append(
+                cal_bce(img1, img2)
+            )
+        avg_ae_differences = torch.mean(torch.stack(ae_differences, dim=0), dim=0)  # [B, C, H, W]
+        avg_bce_differences = torch.mean(torch.stack(bce_differences, dim=0), dim=0)  # [B, C, H, W]
+        return avg_ae_differences, avg_bce_differences
+
+    def forward(self, images: List[torch.Tensor]) -> torch.Tensor:
+        """
+        :param images: image sequence, shape [B, L, C, H, W]
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        ##################################
+        # [B, C, H, W], [B, C, H, W]
+        avg_ae_differences, avg_bce_differences = self._calculate_avg_difference(images)
+
+        ##################################
+
+        x = torch.cat((avg_ae_differences, avg_bce_differences), dim=1)  # [B, mC, H, W]
+        x = self.conv_block_0(x)
+        x = self.conv_block_1(x)
+        x = self.conv_block_2(x)
+
+        ##################################
+
+        difficult_zone = x * self.merge_ratio + avg_ae_differences
+
+        if self.final_transform == 'tanh':
+            return torch.tanh(difficult_zone)
+        elif self.final_transform == 'sigmoid':
+            return torch.sigmoid(difficult_zone)
+        else:
+            return difficult_zone
+
+
+@MODULES_REGISTRY.register()
 class DifficultZoneEstimatorV3w(nn.Module):
     def __init__(
             self,
