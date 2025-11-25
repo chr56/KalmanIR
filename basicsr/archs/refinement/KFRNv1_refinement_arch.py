@@ -21,6 +21,7 @@ class KFRNv1(nn.Module):
             difficult_zone_estimator: Dict[str, Any],
             kalman_gain_calculator: Dict[str, Any],
             kalman_predictor: Dict[str, Any],
+            input_order: list = None,
             preprocess: str = 'none',
             norm_image: bool = False,
             img_range: float = 1.0,
@@ -37,6 +38,8 @@ class KFRNv1(nn.Module):
         self.difficult_zone_estimator: nn.Module = build_module(difficult_zone_estimator)
         self.kalman_gain_calculator: nn.Module = build_module(kalman_gain_calculator)
         self.kalman_predictor: nn.Module = build_module(kalman_predictor)
+
+        self.input_order = input_order
 
         self.preprocess = preprocess
         if self.preprocess == 'layer_norm':
@@ -72,6 +75,9 @@ class KFRNv1(nn.Module):
             images = [self.image_norm(image) for image in images]
 
         images = torch.stack(self.preprocess_images(images), dim=1)  # [B, L, C, H, W]
+
+        if self.input_order:
+            images = images[:, self.input_order, ...]
 
         difficult_zone = self.difficult_zone_estimator(images)  # [B, C, H, W]
 
