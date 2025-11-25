@@ -21,6 +21,13 @@ def cal_bce(value1, value2) -> torch.Tensor:
     return F.binary_cross_entropy(p, q, reduction='none')
 
 
+def cal_bce_sigmoid(value1, value2) -> torch.Tensor:
+    """Calculate Binary Cross Entropy; result's shape remains same."""
+    p = torch.sigmoid(value1)
+    q = torch.sigmoid(value2)
+    return F.binary_cross_entropy(p, q, reduction='none')
+
+
 def cal_cs(value1, value2, dim: int = 1, eps: float = 1e-8) -> torch.Tensor:
     """Calculate Cosine Similarity, taking channel as dimension; result's channel reduces to 1."""
     return F.cosine_similarity(value1, value2, dim, eps).unsqueeze(dim)
