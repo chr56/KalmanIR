@@ -522,3 +522,196 @@ class DifficultZoneEstimatorV3pb(nn.Module):
             return torch.sigmoid(difficult_zone)
         else:
             return difficult_zone
+
+
+@MODULES_REGISTRY.register()
+class DifficultZoneEstimatorV4norm(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            merge_ratio: float = 1.0,
+            final_transform: str = 'none',
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        self.merge_ratio = merge_ratio
+
+        if final_transform == 'tanh':
+            self.final_transform = nn.Tanh()
+        elif final_transform == 'sigmoid':
+            self.final_transform = nn.Sigmoid()
+        elif final_transform == 'none' or final_transform == '':
+            self.final_transform = nn.Identity()
+        else:
+            raise NotImplementedError(f"Unsupported {final_transform}")
+
+        self.norm_ae = nn.InstanceNorm2d(channels)
+        self.norm_bce = nn.InstanceNorm2d(channels)
+
+        from .residual_conv_block import ResidualConvBlock
+        diff_metric_methods = 2
+        ch_layer_0 = channels * num_images * diff_metric_methods
+        ch_layer_1 = channels * num_images
+        ch_layer_2 = channels
+        self.conv_block_0 = ResidualConvBlock(
+            in_channels=ch_layer_0, out_channels=ch_layer_0, num_layers=3,
+            activation_type='silu', norm_type='group', norm_group=num_images * diff_metric_methods,
+        )
+        self.conv_block_1 = ResidualConvBlock(
+            in_channels=ch_layer_0, out_channels=ch_layer_1, num_layers=2,
+            activation_type='silu', norm_type='layer',
+        )
+        self.conv_block_2 = ResidualConvBlock(
+            in_channels=ch_layer_1, out_channels=ch_layer_2, num_layers=2,
+            activation_type='sigmoid', norm_type='layer',
+        )
+
+    def _calculate_difference(self, images: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        :param images: sequence of images [B, L, C, H, W]
+        :return: tuple of difference tensors [B, L, C, H, W]
+        """
+        # noinspection PyPep8Naming
+        B, L, C, H, W = images.shape
+
+        images_shifted = torch.roll(images, shifts=1, dims=1)  # [B, L, C, H, W] (shifted in L)
+
+        ae_diff = cal_ae(images, images_shifted)  # [B, L, C, H, W]
+        bce_diff = cal_bce_sigmoid(images, images_shifted)  # [B, L, C, H, W]
+
+        ae_diff_norm = self.norm_ae(ae_diff.view(B * L, C, H, W)).view(B, L, C, H, W)
+        bce_diff_norm = self.norm_bce(bce_diff.view(B * L, C, H, W)).view(B, L, C, H, W)
+
+        return ae_diff_norm, bce_diff_norm
+
+    def _forward_differences(self, ae_differences: torch.Tensor, bce_differences: torch.Tensor):
+        """
+        :param ae_differences: [B, L, C, H, W]
+        :param bce_differences: [B, L, C, H, W]
+        :return: dz prediction [B, C, H, W]
+        """
+        B, L, C, H, W = ae_differences.shape
+
+        ae_cat = ae_differences.reshape(B, C * L, H, W)
+        bce_cat = bce_differences.reshape(B, C * L, H, W)
+
+        differences = torch.cat((ae_cat, bce_cat), dim=1)
+
+        x = differences # [B, 2 * L * C, H, W]
+        x = self.conv_block_0(x)
+        x = self.conv_block_1(x)
+        x = self.conv_block_2(x)
+
+        return x
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        :param images: image sequence, list of [B, C, H, W] tensors
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        # L * [B, C, H, W], L * [B, C, H, W]
+        delta_ae, delta_bce = self._calculate_difference(images)
+
+        dz_branch_avg = torch.mean(delta_ae, dim=1)  # [B, C, H, W]
+        dz_branch_dl = self._forward_differences(delta_ae, delta_bce)  # [B, C, H, W]
+
+        difficult_zone = dz_branch_avg + dz_branch_dl * self.merge_ratio
+
+        return self.final_transform(difficult_zone)
+
+@MODULES_REGISTRY.register()
+class DifficultZoneEstimatorV4plain(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            merge_ratio: float = 1.0,
+            final_transform: str = 'none',
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        self.merge_ratio = merge_ratio
+
+        if final_transform == 'tanh':
+            self.final_transform = nn.Tanh()
+        elif final_transform == 'sigmoid':
+            self.final_transform = nn.Sigmoid()
+        elif final_transform == 'none' or final_transform == '':
+            self.final_transform = nn.Identity()
+        else:
+            raise NotImplementedError(f"Unsupported {final_transform}")
+
+        from .residual_conv_block import ResidualConvBlock
+        diff_metric_methods = 2
+        ch_layer_0 = channels * num_images * diff_metric_methods
+        ch_layer_1 = channels * num_images
+        ch_layer_2 = channels
+        self.conv_block_0 = ResidualConvBlock(
+            in_channels=ch_layer_0, out_channels=ch_layer_0, num_layers=3,
+            activation_type='silu', norm_type='group', norm_group=num_images * diff_metric_methods,
+        )
+        self.conv_block_1 = ResidualConvBlock(
+            in_channels=ch_layer_0, out_channels=ch_layer_1, num_layers=2,
+            activation_type='silu', norm_type='layer',
+        )
+        self.conv_block_2 = ResidualConvBlock(
+            in_channels=ch_layer_1, out_channels=ch_layer_2, num_layers=2,
+            activation_type='sigmoid', norm_type='layer',
+        )
+
+    def _calculate_difference(self, images: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        :param images: sequence of images [B, L, C, H, W]
+        :return: tuple of difference tensors [B, L, C, H, W]
+        """
+
+        images_shifted = torch.roll(images, shifts=1, dims=1)  # [B, L, C, H, W] (shifted in L)
+
+        ae_diff = cal_ae(images, images_shifted)  # [B, L, C, H, W]
+        bce_diff = cal_bce_sigmoid(images, images_shifted)  # [B, L, C, H, W]
+
+        return ae_diff, bce_diff
+
+    def _forward_differences(self, ae_differences: torch.Tensor, bce_differences: torch.Tensor):
+        """
+        :param ae_differences: [B, L, C, H, W]
+        :param bce_differences: [B, L, C, H, W]
+        :return: dz prediction [B, C, H, W]
+        """
+        B, L, C, H, W = ae_differences.shape
+
+        ae_cat = ae_differences.reshape(B, C * L, H, W)
+        bce_cat = bce_differences.reshape(B, C * L, H, W)
+
+        differences = torch.cat((ae_cat, bce_cat), dim=1)
+
+        x = differences # [B, 2 * L * C, H, W]
+        x = self.conv_block_0(x)
+        x = self.conv_block_1(x)
+        x = self.conv_block_2(x)
+
+        return x
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        :param images: image sequence, list of [B, C, H, W] tensors
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        # L * [B, C, H, W], L * [B, C, H, W]
+        delta_ae, delta_bce = self._calculate_difference(images)
+
+        dz_branch_avg = torch.mean(delta_ae, dim=1)  # [B, C, H, W]
+        dz_branch_dl = self._forward_differences(delta_ae, delta_bce)  # [B, C, H, W]
+
+        difficult_zone = dz_branch_avg + dz_branch_dl * self.merge_ratio
+
+        return self.final_transform(difficult_zone)
