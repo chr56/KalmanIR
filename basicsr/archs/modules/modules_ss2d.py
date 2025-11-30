@@ -377,3 +377,62 @@ class SS2DChanelFirst(nn.Module):
         # [B, H, W, C] -> [B, C, H, W]
         out = out.permute(0, 3, 1, 2)
         return out
+
+
+class MambaVSSBlock(nn.Module):
+    def __init__(
+            self,
+            dim: int,
+            mamba_d_state: int = 8,
+            mamba_d_expand: float = 2.,
+            mamba_dt_rank="auto",
+            mamba_drop_path: float = 0,
+            mamba_kwargs: dict = None,
+            conv_d_compressed: int = 16,
+            conv_d_squeezed: int = 16,
+            conv_leaky_relu: float = 0,
+            conv_kwargs: dict = None,
+            **kwargs,
+    ):
+        if mamba_kwargs is None:
+            mamba_kwargs = {}
+        if conv_kwargs is None:
+            conv_kwargs = {}
+
+        super().__init__()
+
+        self.norm_ss2d = nn.LayerNorm(dim)
+        self.ss2d = SS2D(
+            d_model=dim,
+            d_state=mamba_d_state,
+            dt_rank=mamba_dt_rank,
+            expand=mamba_d_expand,
+            dropout=mamba_drop_path,
+            **mamba_kwargs
+        )
+        self.skip_weight_mamba = nn.Parameter(torch.ones(dim))
+
+        from basicsr.archs.modules.channel_attention import ChannelAttentionBlock
+        self.norm_conv = nn.LayerNorm(dim)
+        self.conv_blk = ChannelAttentionBlock(
+            dim,
+            compressed_channel=conv_d_compressed,
+            squeezed_channel=conv_d_squeezed,
+            leaky_relu=conv_leaky_relu,
+            channel_last=True,
+            **conv_kwargs
+        )
+        self.skip_weight_conv = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        # x: [B, H, W, C]
+
+        x_resi_mamba = self.skip_weight_mamba * x
+        x_mamba = self.ss2d(self.norm_ss2d(x))
+        x = x_mamba + x_resi_mamba
+
+        x_resi_conv = self.skip_weight_conv * x
+        x_conv = self.conv_blk(self.norm_conv(x))
+        x = x_conv + x_resi_conv
+
+        return x
