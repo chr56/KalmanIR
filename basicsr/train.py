@@ -130,6 +130,11 @@ def train_pipeline(opt, opt_path: str, root_path: str, dump_real_option: bool = 
     result = create_train_val_dataloader(opt, logger)
     train_loader, train_sampler, val_loaders, total_epochs, total_iters = result
 
+    from basicsr.utils.visualizer import Visualizer
+    Visualizer.setup(
+        Visualizer(runs=opt['name'])
+    )
+
     # create model
     model = build_model(opt)
 

@@ -51,8 +51,11 @@ class MultiBranchIRModel(BaseModel):
         else:
             self.enabled_output_keys: List[str] = [self.primary_output_key]
 
+        from basicsr.utils.visualizer import Visualizer
+        self.visualizer = Visualizer.instance()
         logger = get_root_logger()
         if self.is_train:
+            self.visualizer.enabled = False
             self.net_g.train()
             train_opt = self.opt['train']
 
@@ -144,6 +147,7 @@ class MultiBranchIRModel(BaseModel):
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
 
     def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
+        self.visualizer.enabled = True
 
         dataset_name: str = dataloader.dataset.opt['name']
         use_pbar: bool = self.opt['val'].get('pbar', False)
@@ -175,6 +179,7 @@ class MultiBranchIRModel(BaseModel):
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
             self.feed_data(val_data)
+            self.visualizer.update_prefix(f"{dataset_name}_{img_name}")
 
             with torch.no_grad():
                 self.output_images = self._multi_branch_patch_forward(
@@ -182,6 +187,10 @@ class MultiBranchIRModel(BaseModel):
                     scale=self.opt.get('scale', 1),
                     enabled_output_keys=self.enabled_output_keys,
                 )
+                for key in self.enabled_output_keys:
+                    self.visualizer.visualize(
+                        self.output_images[key], f"output_{key}",
+                    )
                 visuals = self.get_current_visuals()  # convert to ndarray
                 img_gt = visuals['gt']
                 img_sr = visuals['sr']
@@ -240,6 +249,8 @@ class MultiBranchIRModel(BaseModel):
             pass  # self.net_g_ema.train()
         else:
             self.net_g.train()
+        self.visualizer.clear_prefix()
+        self.visualizer.enabled = False
 
     def _saved_image_path(self, dataset_name, img_name, current_iter, extra_suffix) -> str:
         if self.opt['is_train']:
