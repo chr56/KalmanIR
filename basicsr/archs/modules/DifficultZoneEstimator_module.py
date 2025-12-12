@@ -524,6 +524,17 @@ class DifficultZoneEstimatorV3pb(nn.Module):
             return difficult_zone
 
 
+def _get_transform_layer(final_transform):
+    if final_transform == 'tanh':
+        return nn.Tanh()
+    elif final_transform == 'sigmoid':
+        return nn.Sigmoid()
+    elif final_transform == 'none' or final_transform == '':
+        return nn.Identity()
+    else:
+        raise NotImplementedError(f"Unsupported {final_transform}")
+
+
 @MODULES_REGISTRY.register()
 class DifficultZoneEstimatorV4norm(nn.Module):
     def __init__(
@@ -540,14 +551,7 @@ class DifficultZoneEstimatorV4norm(nn.Module):
 
         self.merge_ratio = merge_ratio
 
-        if final_transform == 'tanh':
-            self.final_transform = nn.Tanh()
-        elif final_transform == 'sigmoid':
-            self.final_transform = nn.Sigmoid()
-        elif final_transform == 'none' or final_transform == '':
-            self.final_transform = nn.Identity()
-        else:
-            raise NotImplementedError(f"Unsupported {final_transform}")
+        self.final_transform = _get_transform_layer(final_transform)
 
         self.norm_ae = nn.InstanceNorm2d(channels)
         self.norm_bce = nn.InstanceNorm2d(channels)
@@ -601,7 +605,7 @@ class DifficultZoneEstimatorV4norm(nn.Module):
 
         differences = torch.cat((ae_cat, bce_cat), dim=1)
 
-        x = differences # [B, 2 * L * C, H, W]
+        x = differences  # [B, 2 * L * C, H, W]
         x = self.conv_block_0(x)
         x = self.conv_block_1(x)
         x = self.conv_block_2(x)
@@ -624,6 +628,7 @@ class DifficultZoneEstimatorV4norm(nn.Module):
 
         return self.final_transform(difficult_zone)
 
+
 @MODULES_REGISTRY.register()
 class DifficultZoneEstimatorV4plain(nn.Module):
     def __init__(
@@ -640,14 +645,7 @@ class DifficultZoneEstimatorV4plain(nn.Module):
 
         self.merge_ratio = merge_ratio
 
-        if final_transform == 'tanh':
-            self.final_transform = nn.Tanh()
-        elif final_transform == 'sigmoid':
-            self.final_transform = nn.Sigmoid()
-        elif final_transform == 'none' or final_transform == '':
-            self.final_transform = nn.Identity()
-        else:
-            raise NotImplementedError(f"Unsupported {final_transform}")
+        self.final_transform = _get_transform_layer(final_transform)
 
         from .residual_conv_block import ResidualConvBlock
         diff_metric_methods = 2
@@ -693,7 +691,7 @@ class DifficultZoneEstimatorV4plain(nn.Module):
 
         differences = torch.cat((ae_cat, bce_cat), dim=1)
 
-        x = differences # [B, 2 * L * C, H, W]
+        x = differences  # [B, 2 * L * C, H, W]
         x = self.conv_block_0(x)
         x = self.conv_block_1(x)
         x = self.conv_block_2(x)
@@ -731,14 +729,7 @@ class DifficultZoneEstimatorV4dl(nn.Module):
         self.channels = channels
         self.num_images = num_images
 
-        if final_transform == 'tanh':
-            self.final_transform = nn.Tanh()
-        elif final_transform == 'sigmoid':
-            self.final_transform = nn.Sigmoid()
-        elif final_transform == 'none' or final_transform == '':
-            self.final_transform = nn.Identity()
-        else:
-            raise NotImplementedError(f"Unsupported {final_transform}")
+        self.final_transform = _get_transform_layer(final_transform)
 
         from .residual_conv_block import ResidualConvBlock
         self.diff_methods = 2
