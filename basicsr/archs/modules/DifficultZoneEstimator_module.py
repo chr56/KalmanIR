@@ -806,3 +806,101 @@ class DifficultZoneEstimatorV4dl(nn.Module):
         difficult_zone = dz_branch_dl
 
         return self.final_transform(difficult_zone)
+
+
+@MODULES_REGISTRY.register()
+class DifficultZoneEstimatorV4ref(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            expand: int = 2,
+            ref_img_index: int = 0,
+            final_transform: str = 'none',
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        assert -1 < ref_img_index < num_images, f"Reference image index ({ref_img_index}) is out of range"
+        self.ref_img_index = ref_img_index
+
+        self.final_transform = _get_transform_layer(final_transform)
+
+        from .residual_conv_block import ResidualConvBlock
+        self.diff_methods = 2
+        self.expand = expand
+        ch_in = self.diff_methods * self.num_images * self.channels
+        ch_mid = self.diff_methods * self.num_images * self.channels * self.expand
+        self.norm_ae = nn.InstanceNorm2d(num_features=self.num_images * self.channels, affine=True)
+        self.norm_bce = nn.InstanceNorm2d(num_features=self.num_images * self.channels, affine=True)
+        self.conv_expand = nn.Conv2d(
+            in_channels=ch_in, out_channels=ch_mid, groups=self.diff_methods,
+            kernel_size=3, padding='same',
+        )
+        self.conv_block_diff = ResidualConvBlock(
+            in_channels=ch_mid, out_channels=ch_mid,
+            activation_type='silu', norm_type='instance',
+        )
+        self.conv_shrink = nn.Conv2d(
+            in_channels=ch_mid, out_channels=self.channels, kernel_size=1,
+        )
+        self.conv_bias = ResidualConvBlock(
+            in_channels=self.channels, out_channels=self.channels, num_layers=3,
+            activation_type='leaky_relu',
+        )
+        self.conv_weight = ResidualConvBlock(
+            in_channels=self.channels, out_channels=self.channels, num_layers=3,
+            activation_type='leaky_relu', norm_after_conv=True,
+        )
+
+    def _forward_differences(
+            self,
+            diff_ae: torch.Tensor,
+            diff_bce: torch.Tensor,
+            reference: torch.Tensor,
+    ):
+        """
+        :param diff_ae: [B, L, C, H, W]
+        :param diff_bce: [B, L, C, H, W]
+        :param reference: [B, C, H, W]
+        :return: predicted difficult zone [B, C, H, W]
+        """
+        B, L, C, H, W = diff_ae.shape
+        ae = diff_ae.reshape(B, C * L, H, W)
+        bce = diff_bce.reshape(B, C * L, H, W)
+
+        ae_normed = self.norm_ae(ae)
+        bce_normed = self.norm_bce(bce)
+
+        x = self.conv_expand(torch.cat((ae_normed, bce_normed), dim=1))  # [B, 2 * L * C * expand, H, W]
+        x = self.conv_block_diff(x)
+        x = self.conv_shrink(x)
+
+        bias = self.conv_bias(reference)
+        weight = torch.exp(self.conv_weight(reference))
+        x = weight * x + bias
+
+        return x
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """
+        :param images: image sequence, list of [B, C, H, W] tensors
+        :return: Difficult Zone, shape [B, C, H, W]
+        """
+
+        #################################
+
+        images_shifted = torch.roll(images, shifts=1, dims=1)  # [B, L, C, H, W] (shift in dim L)
+
+        diff_ae = cal_ae(images, images_shifted)  # [B, L, C, H, W]
+        diff_bce = cal_bce_sigmoid(images, images_shifted)  # [B, L, C, H, W]
+
+        #################################
+
+        ref_img = images[:, self.ref_img_index, ...]  # [B, C, H, W]
+
+        difficult_zone = self._forward_differences(diff_ae, diff_bce, ref_img)  # [B, C, H, W]
+
+        return self.final_transform(difficult_zone)
