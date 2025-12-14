@@ -64,6 +64,7 @@ class MultiBranchSwinIR(nn.Module):
                  img_range=1.,
                  upsampler='',
                  resi_connection='1conv',
+                 frozen_layer=None,
                  **kwargs):
 
         from .components_SwinIR import (
@@ -190,6 +191,9 @@ class MultiBranchSwinIR(nn.Module):
             # for image denoising and JPEG compression artifact reduction
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
 
+        if frozen_layer:
+            self.frozen_layers(frozen_layer)
+
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -283,3 +287,17 @@ class MultiBranchSwinIR(nn.Module):
         flops += H * W * 3 * self.embed_dim * self.embed_dim
         flops += self.upsample.flops()
         return flops
+
+    def frozen_layers(self, target):
+
+        def frozen(module):
+            for param in module.parameters():
+                param.requires_grad = False
+
+        frozen(self.conv_first)
+        frozen(self.patch_embed)
+
+        target_layers = min(target, len(self.layers))
+        for i in range(target_layers):
+            frozen(self.layers[i])
+
