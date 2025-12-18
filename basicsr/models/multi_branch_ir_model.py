@@ -221,7 +221,7 @@ class MultiBranchIRModel(BaseModel):
                         self._update_best_metric_result(
                             dataset_name, metric, branch_metric_results[metric], current_iter
                         )
-            csv_file_path = os.path.join(self.opt['path']['experiments_root'], 'validation_results.csv')
+            csv_file_path = os.path.join(self.opt['path']['log'], 'validation_results.csv')
             log_validation_metric_values(
                 metric_names=metric_names,
                 current_iter=current_iter,
