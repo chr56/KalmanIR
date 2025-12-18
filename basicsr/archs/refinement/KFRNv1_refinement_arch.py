@@ -6,10 +6,9 @@ import torch.nn.functional as F
 
 from basicsr.archs.arch_util import ImageNormalization
 from basicsr.archs.modules import build_module
-from basicsr.archs.modules.layer_norm import LayerNorm2d
 from basicsr.archs.refinement import REFINEMENT_ARCH_REGISTRY
 
-SUPPORTED_PREPROCESS = ['none', 'sigmoid', 'tanh', 'sin', 'layer_norm']
+SUPPORTED_PREPROCESS = ['none', 'sigmoid', 'tanh', 'sin']
 
 
 @REFINEMENT_ARCH_REGISTRY.register()
@@ -42,9 +41,6 @@ class KFRNv1(nn.Module):
         self.input_order = input_order
 
         self.preprocess = preprocess
-        if self.preprocess == 'layer_norm':
-            affine = kwargs.get('preprocess_layer_norm_affine', True)
-            self.layer_norm = LayerNorm2d(channels, eps=1e-6, elementwise_affine=affine)
 
         self.norm_image = norm_image or kwargs.get('rgb_mean_norm', False)
         if self.norm_image:
@@ -54,8 +50,6 @@ class KFRNv1(nn.Module):
                 mean=kwargs.get('rgb_mean', (0.4488, 0.4371, 0.4040)),
             )
 
-        self.kalman_predictor_argument_size = len(self.kalman_predictor.model_input_format())
-
     def preprocess_images(self, images: List[torch.Tensor]):
         if self.preprocess == 'sin':
             return [torch.sin(image) for image in images]
@@ -63,8 +57,6 @@ class KFRNv1(nn.Module):
             return [torch.tanh(image) for image in images]
         elif self.preprocess == 'sigmoid':
             return [torch.sigmoid(image) for image in images]
-        elif self.preprocess == 'layer_norm':
-            return [self.layer_norm(image) for image in images]
         else:
             return images
 
@@ -87,7 +79,6 @@ class KFRNv1(nn.Module):
             image_sequence=images,
             kalman_gain=kalman_gains,
             predictor=self.kalman_predictor,
-            predictor_input_count=self.kalman_predictor_argument_size,
         )
 
         if self.norm_image:
@@ -111,14 +102,12 @@ class KFRNv1(nn.Module):
 def perform_kalman_filtering(
         image_sequence: torch.Tensor,
         kalman_gain: torch.Tensor,
-        predictor: nn.Module,
-        predictor_input_count: int
+        predictor: nn.Module
 ) -> torch.Tensor:
     """ Performs Kalman filtering on an image sequence.
     :param image_sequence: images in sequence, shape [Batch, Sequence, Channel, Height, Weight]
     :param kalman_gain: pre-calculated kalman gain, shape [Batch, Sequence, Channel, Height, Weight]
     :param predictor: module to predict the next state based on the current state
-    :param predictor_input_count: predict input argument size
     :return: refined result, shape [Batch, Channel, Height, Weight]
     """
     current_hat = None
@@ -132,10 +121,7 @@ def perform_kalman_filtering(
             current_hat = current
         else:
             # Predict Step
-            if predictor_input_count == 2:
-                current_prime = predictor(previous.detach(), current)
-            else:
-                current_prime = predictor(previous.detach())
+            current_prime = predictor(previous.detach())
             # Update Step
             current_hat = (1 - input_gain) * current + input_gain * current_prime
         previous = current_hat
