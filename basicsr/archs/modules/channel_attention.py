@@ -50,6 +50,7 @@ class ChannelCrossAttention(nn.Module):
             squeezed_channel: int = -1,
             leaky_relu: float = 0,
             pooling: Literal['avg', 'max'] = 'avg',
+            channel_last: bool = False,
     ):
         super(ChannelCrossAttention, self).__init__()
 
@@ -67,14 +68,21 @@ class ChannelCrossAttention(nn.Module):
         self.activation = nn.LeakyReLU(leaky_relu, inplace=True) if leaky_relu > 0 else nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(squeezed_channel, channel, 1, padding=0)
         self.sigmoid = nn.Sigmoid()
+        self.channel_last = channel_last
 
     def forward(self, x, ref):
+        if self.channel_last:
+            ref = ref.permute(0, 3, 1, 2).contiguous()
+
         y = self.pool(ref)
 
         y = self.conv1(y)
         y = self.activation(y)
         y = self.conv2(y)
         y = self.sigmoid(y)
+
+        if self.channel_last:
+            y = y.permute(0, 2, 3, 1).contiguous()
 
         return x * y
 
@@ -99,7 +107,7 @@ class SpatialAttention(nn.Module):
 
 
 class BottleneckConv(nn.Module):
-    def __init__(self, channel: int, compressed_channel: int = -1):
+    def __init__(self, channel: int, compressed_channel: int = -1, channel_last: bool = False):
         super().__init__()
 
         if compressed_channel <= 0:
@@ -108,11 +116,16 @@ class BottleneckConv(nn.Module):
         self.conv1 = nn.Conv2d(channel, compressed_channel, kernel_size=3, stride=1, padding=1)
         self.activation = nn.GELU()
         self.conv2 = nn.Conv2d(compressed_channel, channel, kernel_size=3, stride=1, padding=1)
+        self.channel_last = channel_last
 
     def forward(self, x):
+        if self.channel_last:
+            x = x.permute(0, 3, 1, 2).contiguous()
         x = self.conv1(x)
         x = self.activation(x)
         x = self.conv2(x)
+        if self.channel_last:
+            x = x.permute(0, 2, 3, 1).contiguous()
         return x
 
 
