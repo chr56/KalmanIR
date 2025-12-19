@@ -43,6 +43,42 @@ class ChannelAttention(nn.Module):
         return x * y
 
 
+class ChannelCrossAttention(nn.Module):
+    def __init__(
+            self,
+            channel: int,
+            squeezed_channel: int = -1,
+            leaky_relu: float = 0,
+            pooling: Literal['avg', 'max'] = 'avg',
+    ):
+        super(ChannelCrossAttention, self).__init__()
+
+        if squeezed_channel <= 0:
+            squeezed_channel = channel // 16
+
+        if pooling == 'avg':
+            self.pool = nn.AdaptiveAvgPool2d(1)
+        elif pooling == 'max':
+            self.pool = nn.AdaptiveMaxPool2d(1)
+        else:
+            raise ValueError('pooling must be "avg" or "max"')
+
+        self.conv1 = nn.Conv2d(channel, squeezed_channel, 1, padding=0)
+        self.activation = nn.LeakyReLU(leaky_relu, inplace=True) if leaky_relu > 0 else nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(squeezed_channel, channel, 1, padding=0)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, ref):
+        y = self.pool(ref)
+
+        y = self.conv1(y)
+        y = self.activation(y)
+        y = self.conv2(y)
+        y = self.sigmoid(y)
+
+        return x * y
+
+
 class SpatialAttention(nn.Module):
     """
     Spatial Attention Module from 'CBAM: Convolutional Block Attention Module'
