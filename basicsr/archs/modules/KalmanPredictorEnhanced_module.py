@@ -164,3 +164,115 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
     @staticmethod
     def model_input_format():
         return ['image', 'difficult_zone']
+
+
+@MODULES_REGISTRY.register()
+class EnhancedKalmanPredictorMambaBlockV1b(nn.Module):
+    def __init__(
+            self,
+            channels: int,
+            num_images: int,
+            hidden_channel_expand: int = 24,
+            num_layer: int = 2,
+            final_activation: str = 'tanh',
+            mamba_d_state: int = 8,
+            mamba_d_expand: float = 2,
+            mamba_dt_rank: int = 'auto',
+            cab_compress_factor: int = 2,
+            cab_squeeze_factor: int = 4,
+    ):
+        super().__init__()
+
+        self.channels = channels
+        self.num_images = num_images
+
+        from .residual_conv_block import ResidualConvBlock
+        self.dim_expand = self.channels * hidden_channel_expand
+
+        self.conv_block_mix_1 = ResidualConvBlock(
+            self.channels * 2, self.channels * 2, kernel_size=5,
+            activation_type='leaky_relu', norm_type='instance'
+        )
+        self.conv_block_mix_2 = ResidualConvBlock(
+            self.channels * 2, self.channels * 2, kernel_size=3,
+            activation_type='leaky_relu', norm_type='instance'
+        )
+        self.conv_block_mix_3 = ResidualConvBlock(
+            self.channels * 2, self.channels * 2, kernel_size=1,
+            activation_type='leaky_relu', norm_type='instance'
+        )
+        self.conv_mix_all = nn.Conv2d(
+            self.channels * 4, self.dim_expand, kernel_size=1, padding='same'
+        )
+        self.conv_block_expand_dz = ResidualConvBlock(
+            self.channels, self.dim_expand,
+            activation_type='sigmoid', norm_type='none'
+        )
+        self.conv_shrink = nn.Conv2d(
+            self.dim_expand, self.channels, kernel_size=3, padding='same'
+        )
+        if final_activation == 'sigmoid':
+            self.final_activation = nn.Sigmoid()
+        elif final_activation == 'tanh':
+            self.final_activation = nn.Tanh()
+        elif final_activation == 'none':
+            self.final_activation = nn.Identity()
+        else:
+            raise NotImplementedError(f'Activation {final_activation} not implemented')
+
+        from .modules_mamba_block import GuidedMambaVSSBlockV1
+        compressed_channels = self.dim_expand // cab_compress_factor
+        squeezed_channels = self.channels // cab_squeeze_factor
+
+        self.num_layer = num_layer
+        self.layers = nn.ModuleList()
+        for _ in range(num_layer):
+            self.layers.append(
+                GuidedMambaVSSBlockV1(
+                    dim=self.dim_expand,
+                    mamba_d_state=mamba_d_state,
+                    mamba_d_expand=mamba_d_expand,
+                    mamba_dt_rank=mamba_dt_rank,
+                    bnc_compressed_channel=compressed_channels,
+                    cca_squeezed_channel=squeezed_channels,
+                    cca_leaky_relu=1e-2,
+                )
+            )
+
+    def forward(self, image: torch.Tensor, difficult_zone: torch.Tensor) -> torch.Tensor:
+        # image; [B, C, H, W]
+        # difficult_zone: [B, C, H, W]
+
+        mix_1_in = torch.cat([image, difficult_zone.detach()], dim=1)
+        mix_1_out = self.conv_block_mix_1(mix_1_in)
+        x_q1 = mix_1_out[:, :self.channels]
+
+        mix_2_in = mix_1_out[:, self.channels:]
+        mix_2_in = torch.cat([mix_2_in, image], dim=1)
+        mix_2_out = self.conv_block_mix_2(mix_2_in)
+        x_q2 = mix_2_out[:, :self.channels]
+
+        mix_3_in = mix_2_out[:, self.channels:]
+        mix_3_in = torch.cat([mix_3_in, difficult_zone.detach()], dim=1)
+        mix_3_out = self.conv_block_mix_3(mix_3_in)
+        x_q34 = mix_3_out
+
+        x = torch.concat([x_q1, x_q2, x_q34], dim=1) # [B, 4C, H, W]
+        x = self.conv_mix_all(x) # [B, C', H, W]
+        x = x.permute(0, 2, 3, 1).contiguous()  # [B, H, W, C']
+
+        y = self.conv_block_expand_dz(difficult_zone)  # [B, C', H, W]
+        y = y.permute(0, 2, 3, 1).contiguous()  # [B, H, W, C']
+
+        for layer in self.layers:
+            x = layer(x, y)
+
+        x = x.permute(0, 3, 1, 2).contiguous()
+        x = self.final_activation(self.conv_shrink(x))
+
+        # [B, C, H, W]
+        return x
+
+    @staticmethod
+    def model_input_format():
+        return ['image', 'difficult_zone']
