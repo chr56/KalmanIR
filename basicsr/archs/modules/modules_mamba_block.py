@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-class GuidedMambaVSSBlock(nn.Module):
+class GuidedMambaVSSBlockV1(nn.Module):
     def __init__(
             self,
             dim: int,
@@ -15,8 +15,6 @@ class GuidedMambaVSSBlock(nn.Module):
             bnc_compressed_channel: int = 16,
             cca_squeezed_channel: int = 16,
             cca_leaky_relu: float = 0,
-            skip_weight_cca: float = 0.4,
-            skip_weight_bnc: float = 1.0,
     ):
         if mamba_kwargs is None:
             mamba_kwargs = {}
@@ -37,17 +35,16 @@ class GuidedMambaVSSBlock(nn.Module):
 
         from basicsr.archs.modules.channel_attention import ChannelCrossAttention
         self.cca = ChannelCrossAttention(
-            dim, squeezed_channel=cca_squeezed_channel, leaky_relu=cca_leaky_relu,
+            dim, squeezed_channel=cca_squeezed_channel, leaky_relu=cca_leaky_relu, channel_last=True,
         )
-        self.norm_cca = nn.InstanceNorm2d(dim)
-        self.skip_weight_cca = skip_weight_cca
-
+        self.norm_cca = nn.LayerNorm(dim)
+        self.skip_weight_cca = nn.Parameter(torch.ones(dim))
         from basicsr.archs.modules.channel_attention import BottleneckConv
         self.bnc = BottleneckConv(
-            dim, compressed_channel=bnc_compressed_channel
+            dim, compressed_channel=bnc_compressed_channel, channel_last=True,
         )
-        self.norm_bnc = nn.InstanceNorm2d(dim)
-        self.skip_weight_bnc = skip_weight_bnc
+        self.norm_bnc = nn.LayerNorm(dim)
+        self.skip_weight_bnc = nn.Parameter(torch.ones(dim))
 
     def forward_ss2d(self, x):
         residual = self.skip_weight_ss2d * x
@@ -65,14 +62,11 @@ class GuidedMambaVSSBlock(nn.Module):
         return main + residual
 
     def forward(self, x, difficult_zone):
-        # x: [B, C, H, W]
-        # difficult_zone: [B, C, H, W]
+        # x: [B, H, W, C]
+        # difficult_zone: [B, H, W, C]
 
         x = self.forward_cca(x, difficult_zone)
-
-        x = x.permute(0, 2, 3, 1).contiguous()
         x = self.forward_ss2d(x)
-        x = x.permute(0, 3, 1, 2).contiguous()
 
         x = self.forward_conv(x)
 

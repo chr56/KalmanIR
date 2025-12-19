@@ -95,8 +95,6 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
             mamba_dt_rank: int = 'auto',
             cab_compress_factor: int = 2,
             cab_squeeze_factor: int = 4,
-            skip_weight_cca: float = 0.4,
-            skip_weight_bnc: float = 1.0,
     ):
         super().__init__()
 
@@ -125,7 +123,7 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
         else:
             raise NotImplementedError(f'Activation {final_activation} not implemented')
 
-        from .modules_mamba_block import GuidedMambaVSSBlock
+        from .modules_mamba_block import GuidedMambaVSSBlockV1
         compressed_channels = self.dim_expand // cab_compress_factor
         squeezed_channels = self.channels // cab_squeeze_factor
 
@@ -133,7 +131,7 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
         self.layers = nn.ModuleList()
         for _ in range(num_layer):
             self.layers.append(
-                GuidedMambaVSSBlock(
+                GuidedMambaVSSBlockV1(
                     dim=self.dim_expand,
                     mamba_d_state=mamba_d_state,
                     mamba_d_expand=mamba_d_expand,
@@ -141,8 +139,6 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
                     bnc_compressed_channel=compressed_channels,
                     cca_squeezed_channel=squeezed_channels,
                     cca_leaky_relu=1e-2,
-                    skip_weight_cca=skip_weight_cca,
-                    skip_weight_bnc=skip_weight_bnc,
                 )
             )
 
@@ -153,9 +149,13 @@ class EnhancedKalmanPredictorMambaBlockV1a(nn.Module):
         x = self.conv_block_expand_img(torch.cat([image, difficult_zone.detach()], dim=1))  # [B, C', H, W]
         y = self.conv_block_expand_dz(difficult_zone)  # [B, C', H, W]
 
+        x = x.permute(0, 2, 3, 1).contiguous()  # [B, H, W, C']
+        y = y.permute(0, 2, 3, 1).contiguous()  # [B, H, W, C']
+
         for layer in self.layers:
             x = layer(x, y)
 
+        x = x.permute(0, 3, 1, 2).contiguous()
         x = self.final_activation(self.conv_shrink(x))
 
         # [B, C, H, W]
