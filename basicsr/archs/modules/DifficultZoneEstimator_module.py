@@ -203,6 +203,9 @@ class DifficultZoneEstimatorV4plain(nn.Module):
             activation_type='sigmoid', norm_type='layer',
         )
 
+        from basicsr.utils.visualizer import Visualizer
+        self.visualizer = Visualizer.instance()
+
     def _calculate_difference(self, images: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param images: sequence of images [B, L, C, H, W]
@@ -245,10 +248,17 @@ class DifficultZoneEstimatorV4plain(nn.Module):
         # L * [B, C, H, W], L * [B, C, H, W]
         delta_ae, delta_bce = self._calculate_difference(images)
 
+        for i in range(self.num_images):
+            self.visualizer.visualize(delta_ae[:, i, ...], f'delta_ae_{i}')
+            self.visualizer.visualize(delta_bce[:, i, ...], f'delta_bce_{i}')
+
         dz_branch_avg = torch.mean(delta_ae, dim=1)  # [B, C, H, W]
         dz_branch_dl = self._forward_differences(delta_ae, delta_bce)  # [B, C, H, W]
 
         difficult_zone = dz_branch_avg + dz_branch_dl * self.merge_ratio
+
+        self.visualizer.visualize(dz_branch_dl, 'difficult_zone_dl')
+        self.visualizer.visualize(dz_branch_avg, 'difficult_zone_avg')
 
         return self.final_transform(difficult_zone)
 
@@ -296,6 +306,9 @@ class DifficultZoneEstimatorV4dl(nn.Module):
             in_channels=ch_mid, out_channels=self.channels, kernel_size=1,
         )
 
+        from basicsr.utils.visualizer import Visualizer
+        self.visualizer = Visualizer.instance()
+
     def _calculate_difference(self, images: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param images: sequence of images [B, L, C, H, W]
@@ -339,8 +352,14 @@ class DifficultZoneEstimatorV4dl(nn.Module):
         # L * [B, C, H, W], L * [B, C, H, W]
         delta_ae, delta_bce = self._calculate_difference(images)
 
+        for i in range(self.num_images):
+            self.visualizer.visualize(delta_ae[:, i, ...], f'delta_ae_{i}')
+            self.visualizer.visualize(delta_bce[:, i, ...], f'delta_bce_{i}')
+
         dz_branch_dl = self._forward_differences(delta_ae, delta_bce)  # [B, C, H, W]
 
         difficult_zone = dz_branch_dl
+
+        self.visualizer.visualize(difficult_zone, 'difficult_zone_dl')
 
         return self.final_transform(difficult_zone)

@@ -406,6 +406,9 @@ class KalmanGainCalculatorV4snf(nn.Module):
         )
         self.dim_hidden = dim_hidden
 
+        from basicsr.utils.visualizer import Visualizer
+        self.visualizer = Visualizer.instance()
+
     # noinspection PyPep8Naming
     def _forward_image_features(self, image_sequence: torch.Tensor):
         # input [B, L, C, H, W]
@@ -422,6 +425,9 @@ class KalmanGainCalculatorV4snf(nn.Module):
         # input [B, C, H, W]
         B, C, H, W = difficult_zone.shape
         dz_transformed = torch.sigmoid(torch.pow(self.dz_norm(difficult_zone) * self.dz_amplify, 3))
+
+        self.visualizer.visualize(dz_transformed, 'difficult_zone_amplified')
+
         dz_mean = torch.mean(difficult_zone.view(B, C, H * W), dim=-1, keepdim=True).view(B, C, 1, 1)
         dz_feature = torch.cat((dz_transformed, dz_mean.expand(-1, -1, H, W)), dim=1)  # [B, 2C, H, W]
         dz_feature = self.dz_conv_block_1(dz_feature)

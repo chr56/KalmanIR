@@ -50,6 +50,9 @@ class KFRNv1(nn.Module):
                 mean=kwargs.get('rgb_mean', (0.4488, 0.4371, 0.4040)),
             )
 
+        from basicsr.utils.visualizer import Visualizer
+        self.visualizer = Visualizer.instance()
+
     def preprocess_images(self, images: List[torch.Tensor]):
         if self.preprocess == 'sin':
             return [torch.sin(image) for image in images]
@@ -83,6 +86,9 @@ class KFRNv1(nn.Module):
 
         if self.norm_image:
             refined = self.image_norm.recover(refined)
+
+        for i in range(self.branch):
+            self.visualizer.visualize(kalman_gains[:, i, ...], f'kalman_gain_{i}')
 
         return {
             'sr_refined': refined,  # [B, C, H, W]
