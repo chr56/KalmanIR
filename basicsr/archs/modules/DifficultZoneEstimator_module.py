@@ -6,16 +6,7 @@ from torch.nn import functional as F
 
 from . import MODULES_REGISTRY
 from .utils_calculation import cal_ae, cal_bce, cal_bce_sigmoid, cal_cs, cal_kl
-
-def _get_transform_layer(final_transform):
-    if final_transform == 'tanh':
-        return nn.Tanh()
-    elif final_transform == 'sigmoid':
-        return nn.Sigmoid()
-    elif final_transform == 'none' or final_transform == '':
-        return nn.Identity()
-    else:
-        raise NotImplementedError(f"Unsupported {final_transform}")
+from .utils import NormLayerType, ActivationFunction, get_activation_function
 
 
 @MODULES_REGISTRY.register()
@@ -34,7 +25,7 @@ class DifficultZoneEstimatorV4plain(nn.Module):
 
         self.merge_ratio = merge_ratio
 
-        self.final_transform = _get_transform_layer(final_transform)
+        self.final_transform = get_activation_function(final_transform, required=False)
 
         from .residual_conv_block import ResidualConvBlock
         diff_metric_methods = 2
@@ -118,7 +109,7 @@ class DifficultZoneEstimatorV4dl(nn.Module):
         self.channels = channels
         self.num_images = num_images
 
-        self.final_transform = _get_transform_layer(final_transform)
+        self.final_transform = get_activation_function(final_transform, required=False)
 
         from .residual_conv_block import ResidualConvBlock
         self.diff_methods = 2
@@ -216,7 +207,7 @@ class DifficultZoneEstimatorV5base(nn.Module):
         self.ae_amplify = ae_amplify
         self.bce_scale = bce_scale
 
-        self.final_transform = _get_transform_layer(final_transform)
+        self.final_transform = get_activation_function(final_transform, required=False)
 
         from .residual_conv_block import ResidualConvBlock
         self.diff_methods = 2
