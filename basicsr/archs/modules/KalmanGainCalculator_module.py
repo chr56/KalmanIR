@@ -103,9 +103,10 @@ class KalmanGainCalculatorV5base(nn.Module):
             self,
             channels: int,
             num_images: int,
-            img_expand: int = 2,
+            dz_amplify: float = 2.,
             dz_expand: int = 2,
-            dz_amplify: float = 2,
+            img_expand: int = 2,
+            merge_expand: int = 2,
     ):
         from .residual_conv_block import ResidualConvBlock
         super().__init__()
@@ -117,12 +118,13 @@ class KalmanGainCalculatorV5base(nn.Module):
         self.dz_expand = dz_expand
         self.dz_amplify = dz_amplify
         self.dz_norm = nn.InstanceNorm2d(self.channels)
+        self.merge_expand = merge_expand
 
         dim_dz_enhanced = self.channels * 3
         dim_dz_features = self.channels * self.dz_expand
         self.conv_block_dz = ResidualConvBlock(
             in_channels=dim_dz_enhanced, out_channels=dim_dz_features,
-            activation_type='silu', norm_type='instance',
+            activation_type='sigmoid', norm_type='instance', norm_after_conv=True,
         )
 
         dim_img_in = self.channels
@@ -137,14 +139,14 @@ class KalmanGainCalculatorV5base(nn.Module):
         )
 
         dim_in = dim_dz_features + dim_img_features
-        dim_hidden = dim_in * 2
+        dim_hidden = dim_in * self.merge_expand
         self.conv_block_merge_1 = ResidualConvBlock(
             in_channels=dim_in, out_channels=dim_hidden,
-            activation_type='leaky_relu',
+            activation_type='leaky_relu', norm_type='instance',
         )
         self.conv_block_merge_2 = ResidualConvBlock(
             in_channels=dim_hidden, out_channels=self.channels,
-            activation_type='silu',
+            activation_type='tanh', norm_type='instance',
         )
 
     # noinspection PyPep8Naming
@@ -179,6 +181,7 @@ class KalmanGainCalculatorV5base(nn.Module):
 
         dz_enhanced = self._enhance_difficult_zone(difficult_zone)  # [B, 3C, H, W]
         dz_features = self.conv_block_dz(dz_enhanced)  # [B, C_dz, H, W]
+
         image_features = self._extract_image_features(image_sequence)  # [B, L, C_img, H, W]
 
         kalman_gains = []
