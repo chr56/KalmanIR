@@ -127,7 +127,7 @@ def paired_paths_from_lmdb(folders, keys):
             Note that this key is different from lmdb keys.
 
     Returns:
-        list[str]: Returned path list.
+        list[dict[str, str]: Returned path list.
     """
     assert len(folders) == 2, ('The len of folders should be 2 with [input_folder, gt_folder]. '
                                f'But got {len(folders)}')
@@ -176,7 +176,7 @@ def paired_paths_from_meta_info_file(folders, keys, meta_info_file, filename_tmp
             for files in the input folder.
 
     Returns:
-        list[str]: Returned path list.
+        list[dict[str, str]: Returned path list.
     """
     assert len(folders) == 2, ('The len of folders should be 2 with [input_folder, gt_folder]. '
                                f'But got {len(folders)}')
@@ -210,7 +210,7 @@ def paired_paths_from_folder(folders, keys, filename_tmpl, task):
             for files in the input folder.
 
     Returns:
-        list[str]: Returned path list.
+        list[dict[str, str]]: Returned path list.
     """
     assert len(folders) == 2, ('The len of folders should be 2 with [input_folder, gt_folder]. '
                                f'But got {len(folders)}')
