@@ -226,13 +226,12 @@ class DifficultZoneEstimatorV5base(nn.Module):
         self.conv_expand = nn.Conv2d(
             in_channels=ch_in, out_channels=ch_mid, groups=self.diff_methods, kernel_size=3, padding='same',
         )
-        self.activation_in = torch.nn.Sigmoid()
         self.conv_block_a = ResidualConvBlock(
-            in_channels=ch_mid, out_channels=ch_mid,
-            activation_type='silu', norm_type='instance',
+            in_channels=ch_mid, out_channels=ch_mid, num_layers=2,
+            activation_type='leaky_relu', norm_type='instance',
         )
         self.conv_block_b = ResidualConvBlock(
-            in_channels=ch_mid, out_channels=ch_mid,
+            in_channels=ch_mid, out_channels=ch_mid, num_layers=3,
             activation_type='silu', norm_type='instance',
         )
         self.conv_shrink = nn.Conv2d(
@@ -265,10 +264,10 @@ class DifficultZoneEstimatorV5base(nn.Module):
 
         differences = torch.cat((ae_cat, bce_cat), dim=1)
 
-        x_in = self.activation_in(self.conv_expand(differences))  # [B, 2 * L * C * expand, H, W]
+        x = self.conv_expand(differences)  # [B, 2 * L * C * expand, H, W]
 
-        x = self.conv_block_a(x_in)
-        x = self.conv_block_b(x) + x_in
+        x = self.conv_block_a(x)
+        x = self.conv_block_b(x)
 
         x = self.conv_shrink(x)
 
