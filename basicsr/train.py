@@ -245,6 +245,8 @@ def train_pipeline(opt, opt_path: str, root_path: str, dump_real_option: bool = 
     if tb_logger:
         tb_logger.close()
 
+    return model
+
 
 def calculate_eta(current, total, start_time):
     current_time = time.time()

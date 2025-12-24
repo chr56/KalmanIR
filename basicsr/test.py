@@ -47,6 +47,8 @@ def test_pipeline(opt):
         logger.info(f'Testing {test_set_name}...')
         model.validation(test_loader, current_iter=opt['name'], tb_logger=None, save_img=opt['val']['save_img'])
 
+    return model
+
 
 if __name__ == '__main__':
     test_from_option_file(ROOT_PATH)
