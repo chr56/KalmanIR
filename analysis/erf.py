@@ -23,9 +23,9 @@ from torchvision import datasets, transforms
 from timm.utils import AverageMeter
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from PIL import Image
-from basicsr.utils.options import dict2str, parse_options
+from basicsr.utils.options import dict2str, parse_argument_for_options
 root_path = '../basicsr/options/test/test_MambaIR_SR_x2.yml'
-opt, _ = parse_options(root_path, is_train=False)
+opt, _ = parse_argument_for_options(root_path, is_train=False)
 opt=opt['datasets']['test_4'] # we use the 4-th SR testsets(i.e. Urban100) to visualize ERF.
 
 

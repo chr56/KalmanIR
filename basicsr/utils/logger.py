@@ -145,6 +145,25 @@ def init_wandb_logger(opt):
     logger.info(f'Use wandb logger with id={wandb_id}; project={project}.')
 
 
+def setup_external_logger(opt):
+    # initialize wandb logger before tensorboard logger to allow proper sync
+    if (
+            (opt['logger'].get('wandb') is not None) and
+            (opt['logger']['wandb'].get('project') is not None) and
+            ('debug' not in opt['name'])
+    ):
+        assert opt['logger'].get('use_tb_logger') is True, 'should turn on tensorboard when using wandb'
+        init_wandb_logger(opt)
+
+    tb_logger = None
+    if (
+            (opt['logger'].get('use_tb_logger')) and
+            ('debug' not in opt['name'])
+    ):
+        tb_logger = init_tb_logger(log_dir=opt['path']['tb_logger_directory'])
+    return tb_logger
+
+
 def get_root_logger(logger_name='basicsr', log_level=logging.INFO, log_file=None):
     """Get the root logger.
 

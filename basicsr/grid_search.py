@@ -10,7 +10,7 @@ ROOT_PATH = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
 sys.path.append(ROOT_PATH)  # Add the parent directory to sys.path for `basicsr`
 
 from basicsr.utils.options import (
-    parse_arguments, process_options, ordered_yaml
+    parse_arguments, setup_env_and_update_options, ordered_yaml
 )
 from basicsr.train import train_pipeline
 
@@ -73,7 +73,7 @@ def train_from_template(root_path: str):
         print("================================")
         print(f"Training option {i + 1} {opt['name']}")
         print("================================")
-        actual_opt = process_options(
+        actual_opt = setup_env_and_update_options(
             opt=opt,
             launcher=arguments.launcher,
             auto_resume=arguments.auto_resume,
@@ -83,7 +83,7 @@ def train_from_template(root_path: str):
             is_train=True,
         )
         try:
-            train_pipeline(actual_opt, opt_path=template_path, root_path=root_path, dump_real_option=True)
+            train_pipeline(actual_opt, opt_path=template_path, dump_real_option=True)
             print("================================")
             print(f"Training option {i + 1} Completed!")
             print("================================")

@@ -9,12 +9,12 @@ sys.path.append(ROOT_PATH)  # Add the parent directory to sys.path for `basicsr`
 from basicsr.data import build_dataloader, build_dataset
 from basicsr.models import build_model
 from basicsr.utils import get_root_logger, get_time_str, make_exp_dirs
-from basicsr.utils.options import dict2str, parse_options
+from basicsr.utils.options import dict2str, parse_argument_for_options
 
 
 def test_from_option_file(root_path):
     # parse options, set distributed setting, set ramdom seed
-    opt, _ = parse_options(root_path, is_train=False)
+    opt, _ = parse_argument_for_options(root_path, is_train=False)
 
     test_pipeline(opt)
 

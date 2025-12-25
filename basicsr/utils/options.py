@@ -1,7 +1,7 @@
 import argparse
 import os
 import random
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 import yaml
@@ -106,12 +106,13 @@ def parse_arguments():
     return args
 
 
-def parse_options(root_path, is_train=True):
+def parse_argument_for_options(root_path: str, is_train: bool = True) -> Tuple[dict, str]:
     arguments = parse_arguments()
-    with open(arguments.opt, mode='r') as f:
+    yml_opt_path = arguments.opt
+    with open(yml_opt_path, mode='r') as f:
         # parse yml to dict
         opt = yaml.load(f, Loader=ordered_yaml()[0])
-    return process_options(
+    return setup_env_and_update_options(
         opt=opt,
         launcher=arguments.launcher,
         auto_resume=arguments.auto_resume,
@@ -119,10 +120,10 @@ def parse_options(root_path, is_train=True):
         force_yml=arguments.force_yml,
         root_path=root_path,
         is_train=is_train,
-    ), arguments
+    ), yml_opt_path
 
 
-def process_options(
+def setup_env_and_update_options(
         opt: OrderedDict,
         launcher: str,
         auto_resume: bool,
@@ -130,8 +131,7 @@ def process_options(
         force_yml: list,
         root_path: str,
         is_train=True,
-):
-
+) -> OrderedDict:
     # distributed settings
     if launcher == 'none':
         opt['dist'] = False
@@ -175,6 +175,13 @@ def process_options(
     if opt['num_gpu'] == 'auto':
         opt['num_gpu'] = torch.cuda.device_count()
 
+    if is_train:
+        if 'debug' in opt['name']:
+            if 'val' in opt:
+                opt['val']['val_freq'] = 20
+            opt['logger']['print_freq'] = 4
+            opt['logger']['save_checkpoint_freq'] = 40
+
     # datasets
     for phase, dataset in opt['datasets'].items():
         # for multiple datasets, e.g., val_1, val_2; test_1, test_2
@@ -191,7 +198,13 @@ def process_options(
     for key, val in opt['path'].items():
         if (val is not None) and ('resume_state' in key or 'pretrain_network' in key):
             opt['path'][key] = osp.expanduser(val)
+    populate_paths(opt, root_path, is_train)
 
+    return opt
+
+
+def populate_paths(opt: dict, root_path: str, is_train: bool):
+    opt['path']['root_path'] = root_path
     if is_train:
         experiments_root = osp.join(root_path, 'experiments', opt['name'])
         opt['path']['experiments_root'] = experiments_root
@@ -200,19 +213,14 @@ def process_options(
         opt['path']['log'] = experiments_root
         opt['path']['visualization'] = osp.join(experiments_root, 'visualization')
 
-        # change some options for debug mode
-        if 'debug' in opt['name']:
-            if 'val' in opt:
-                opt['val']['val_freq'] = 20
-            opt['logger']['print_freq'] = 4
-            opt['logger']['save_checkpoint_freq'] = 40
+        tb_logger_root = osp.join(root_path, 'tb_logger')
+        opt['path']['tb_logger_directory'] = osp.join(tb_logger_root, opt['name'])
+
     else:  # test
         results_root = osp.join(root_path, 'results', opt['name'])
         opt['path']['results_root'] = results_root
         opt['path']['log'] = results_root
         opt['path']['visualization'] = osp.join(results_root, 'visualization')
-
-    return opt
 
 
 @master_only
@@ -233,11 +241,10 @@ def copy_opt_file(opt_file, experiments_root):
 
 
 @master_only
-def dump_option(opt: dict, path=None):
+def dump_opt_file(opt: dict, filename):
     try:
-        path = path or osp.join(opt['path']['experiments_root'], opt['name']) + '.yml'
-        os.makedirs(osp.dirname(path), exist_ok=True)
-        with open(path, mode='w') as f:
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, mode='w') as f:
             yaml.dump(opt, f, Dumper=ordered_yaml()[1])
     except Exception as e:
         print(f'Failed to dump option, {e}!')

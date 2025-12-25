@@ -34,20 +34,33 @@ def mkdir_and_rename(path):
     os.makedirs(path, exist_ok=True)
 
 
+_IGNORED_PATH_WORDS = [
+    'root_path',
+    'tb_logger_directory',
+    'pretrain_network',
+    'strict_load',
+    'resume',
+    'param_key',
+]
+
 @master_only
 def make_exp_dirs(opt):
     """Make dirs for experiments."""
     path_opt = opt['path'].copy()
+
     if opt['is_train']:
         mkdir_and_rename(path_opt.pop('experiments_root'))
+        if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
+            tb_logger_directory = path_opt.pop('tb_logger_directory')
+            mkdir_and_rename(tb_logger_directory)
     else:
         mkdir_and_rename(path_opt.pop('results_root'))
+
     for key, path in path_opt.items():
-        if ('strict_load' in key) or ('pretrain_network' in key) or ('resume' in key) or ('param_key' in key):
+        if ('root_path' in key) or ('tb_logger_directory' in key) or ('strict_load' in key) or ('pretrain_network' in key) or ('resume' in key) or ('param_key' in key):
             continue
         else:
             os.makedirs(path, exist_ok=True)
-
 
 def scandir(dir_path, suffix=None, recursive=False, full_path=False):
     """Scan a directory to find the interested files.

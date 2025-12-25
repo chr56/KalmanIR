@@ -13,21 +13,12 @@ from basicsr.data import build_dataloader, build_dataset
 from basicsr.data.data_sampler import EnlargedSampler
 from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
 from basicsr.models import build_model
-from basicsr.utils import (AvgTimer, MessageLogger, check_resume, get_env_info, get_root_logger, get_time_str,
-                           init_tb_logger, init_wandb_logger, make_exp_dirs, mkdir_and_rename, scandir)
-from basicsr.utils.options import copy_opt_file, dump_option, dict2str, parse_options, parse_val_profiles
-
-
-def init_tb_loggers(opt, tb_logger_root):
-    # initialize wandb logger before tensorboard logger to allow proper sync
-    if (opt['logger'].get('wandb') is not None) and (opt['logger']['wandb'].get('project')
-                                                     is not None) and ('debug' not in opt['name']):
-        assert opt['logger'].get('use_tb_logger') is True, ('should turn on tensorboard when using wandb')
-        init_wandb_logger(opt)
-    tb_logger = None
-    if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
-        tb_logger = init_tb_logger(log_dir=osp.join(tb_logger_root, opt['name']))
-    return tb_logger
+from basicsr.utils import (AvgTimer, MessageLogger, check_resume,
+                           get_env_info, get_root_logger, get_time_str,
+                           make_exp_dirs, setup_external_logger, scandir)
+from basicsr.utils.options import (
+    copy_opt_file, dump_opt_file, dict2str, parse_argument_for_options, parse_val_profiles
+)
 
 
 def create_train_val_dataloader(opt, logger):
@@ -92,16 +83,28 @@ def load_resume_state(opt):
     return resume_state
 
 
+def dump_options(opt: dict, opt_path: str, dump_real_option: bool):
+    # copy the yml file to the experiment root
+    if opt_path is not None:
+        copy_opt_file(opt_path, opt['path']['experiments_root'])
+    if dump_real_option:
+        path = osp.join(opt['path']['experiments_root'], f"opt_{opt['name']}.yml")
+        dump_opt_file(opt, path)
+
+
+def initialize_logger(log_file):
+    logger = get_root_logger(logger_name='basicsr', log_level=logging.INFO, log_file=log_file)
+    logger.info(get_env_info())
+    return logger
+
+
 def train_from_option_file(root_path):
     # parse options, set distributed setting, set ramdom seed
-    opt, args = parse_options(root_path, is_train=True)
-    opt['root_path'] = root_path
-
-    train_pipeline(opt, opt_path=args.opt, root_path=root_path)
+    opt, opt_path = parse_argument_for_options(root_path, is_train=True)
+    train_pipeline(opt, opt_path=opt_path)
 
 
-def train_pipeline(opt, opt_path: str, root_path: str, dump_real_option: bool = False):
-
+def train_pipeline(opt: dict, opt_path: str, dump_real_option: bool = False):
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
 
@@ -110,25 +113,20 @@ def train_pipeline(opt, opt_path: str, root_path: str, dump_real_option: bool = 
     # mkdir for experiments and logger
     if resume_state is None and opt['rank'] == 0:
         make_exp_dirs(opt)
-        if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name'] and opt['rank'] == 0:
-            mkdir_and_rename(osp.join(root_path, 'tb_logger', opt['name']))
 
-    # copy the yml file to the experiment root
-    copy_opt_file(opt_path, opt['path']['experiments_root'])
-    if dump_real_option:
-        dump_option(opt)
+    dump_options(opt, opt_path, dump_real_option)
 
     # WARNING: should not use get_root_logger in the above codes, including the called functions
     # Otherwise the logger will not be properly initialized
-    log_file = osp.join(opt['path']['log'], f"train_{opt['name']}_{get_time_str()}.log")
-    logger = get_root_logger(logger_name='basicsr', log_level=logging.INFO, log_file=log_file)
-    logger.info(get_env_info())
+    logger = initialize_logger(
+        log_file=osp.join(opt['path']['log'], f"train_{opt['name']}_{get_time_str()}.log")
+    )
     logger.info(dict2str(opt))
     # initialize wandb and tb loggers
-    tb_logger = init_tb_loggers(opt, tb_logger_root=osp.join(root_path, 'tb_logger'))
+    tb_logger = setup_external_logger(opt)
+
     # create train and validation dataloaders
-    result = create_train_val_dataloader(opt, logger)
-    train_loader, train_sampler, val_loaders, total_epochs, total_iters = result
+    train_loader, train_sampler, val_loaders, total_epochs, total_iters = create_train_val_dataloader(opt, logger)
 
     # create model
     model = build_model(opt)
