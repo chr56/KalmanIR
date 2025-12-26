@@ -100,6 +100,7 @@ class MultiBranchIRModel(BaseModel):
         self.gt = None
         self.output_images = None
         self.metric_results: Dict[str, Dict[str, Any]] = dict()
+        self.current_metric_results: Dict[str, Any] = dict()
 
     def _setup_ema_decay(self):
         logger = get_root_logger()
@@ -201,11 +202,11 @@ class MultiBranchIRModel(BaseModel):
 
             if with_metrics:
                 # calculate metrics
-                for key in self.enabled_output_keys:
-                    for name, opt_ in metrics_opt.items():
-                        metric_data['img'] = img_sr[key]
+                for branch_name in self.enabled_output_keys:
+                    for metric_name, opt_ in metrics_opt.items():
+                        metric_data['img'] = img_sr[branch_name]
                         metric_data['img2'] = img_gt
-                        self.metric_results[key][name] += calculate_metric(metric_data, opt_)
+                        self.metric_results[branch_name][metric_name] += calculate_metric(metric_data, opt_)
                     pass
             if use_pbar:
                 pbar.update(1)
@@ -232,6 +233,8 @@ class MultiBranchIRModel(BaseModel):
                 tb_logger=tb_logger,
                 csv_file_path=csv_file_path,
             )
+            if self.primary_output_key is not None:
+                self.current_metric_results = self.metric_results[self.primary_output_key]
 
         if use_pbar:
             pbar.close()
