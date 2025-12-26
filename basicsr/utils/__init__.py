@@ -5,7 +5,8 @@ from .logger import (
     init_tb_logger, init_wandb_logger, setup_external_logger,
 )
 from .misc import (
-    check_resume, get_time_str, make_exp_dirs, mkdir_and_rename, scandir, set_random_seed, sizeof_fmt
+    check_resume, get_time_str, make_exp_dirs, mkdir_and_rename, scandir, set_random_seed, sizeof_fmt,
+    calculate_eta, set_nested_dict_value, get_nested_dict_value,
 )
 from .binary_transform import *
 
@@ -34,6 +35,9 @@ __all__ = [
     'scandir',
     'check_resume',
     'sizeof_fmt',
+    'calculate_eta',
+    'set_nested_dict_value',
+    'get_nested_dict_value',
     # binary_transform
     'decimal_to_binary',
     'binary_to_decimal'

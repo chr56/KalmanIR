@@ -161,3 +161,24 @@ def check_value(tensor: torch.Tensor, name: str = ''):
     inf_count = tensor.isinf().sum().item()
     if inf_count > 0:
         print(f"`{name}` contains {inf_count} Inf values!")
+
+def calculate_eta(current, total, start_time):
+    import datetime
+    current_time = time.time()
+    elapsed_duration = current_time - start_time
+    if current == 0: return "N/A"
+    estimated_total_duration = elapsed_duration * (total / current)
+    eta = str(datetime.timedelta(seconds=int(estimated_total_duration - elapsed_duration)))
+    return eta
+
+
+def set_nested_dict_value(target: dict, key_path: list, value):
+    for key in key_path[:-1]:
+        target = target.setdefault(key, {})
+    target[key_path[-1]] = value
+
+
+def get_nested_dict_value(target: dict, key_path: list):
+    for key in key_path:
+        target = target[key]
+    return target

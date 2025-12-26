@@ -86,3 +86,48 @@ def log_validation_metric_to_csv(
     except Exception as e:
         from .logger import get_root_logger
         get_root_logger().error(f"Failed to log metrics to CSV: {e}")
+
+
+#######################################
+
+
+
+def calculate_best_average_metrics(best_metric_results: dict) -> dict:
+    """
+    Calculate the average metric value across all datasets from best results.
+    :param best_metric_results: Dict["dataset_name", Dict["metric_name", "value"]]
+    :return: averaged metrics Dict["metric", "value"]
+    """
+    metric_sums = {}
+    metric_counts = {}
+
+    for dataset_name, metrics in best_metric_results.items():
+        for metric_name, data in metrics.items():
+            value = data['val']
+
+            if metric_name not in metric_sums:
+                metric_sums[metric_name] = 0.0
+                metric_counts[metric_name] = 0
+
+            metric_sums[metric_name] += value
+            metric_counts[metric_name] += 1
+
+    average_metrics = {}
+    for metric_name in metric_sums:
+        if metric_counts[metric_name] > 0:
+            average_metrics[metric_name] = metric_sums[metric_name] / metric_counts[metric_name]
+
+    return average_metrics
+
+
+class EarlyStoppingWatcher:
+    def __init__(self):
+        super().__init__()
+
+    def report(self, step: int, val_dataset_name: str, metric: Dict[str, Any]):
+        pass
+
+    def commit(self) -> bool:
+        return False
+
+
