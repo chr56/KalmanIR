@@ -10,20 +10,22 @@ from basicsr.utils import get_root_logger
 from basicsr.utils.dist_util import master_only
 
 
-class BaseModel():
+class BaseModel:
     """Base model."""
 
-    def __init__(self, opt):
+    def __init__(self, opt: dict):
         self.opt = opt
         self.device = torch.device('cuda' if opt['num_gpu'] != 0 else 'cpu')
-        self.is_train = opt['is_train']
+        self.is_train = bool(opt['is_train'])
         self.schedulers = []
         self.optimizers = []
+
+        self.log_dict = dict()
 
     def feed_data(self, data):
         pass
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, current_iter: int):
         pass
 
     def get_current_visuals(self):
@@ -46,6 +48,12 @@ class BaseModel():
             self.dist_validation(dataloader, current_iter, tb_logger, save_img)
         else:
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
+
+    def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
+        pass
+
+    def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
+        pass
 
     def _initialize_best_metric_results(self, dataset_name):
         """Initialize the best metric results dict for recording the best metric value and iteration."""
@@ -74,9 +82,12 @@ class BaseModel():
 
     def model_ema(self, decay=0.999):
         net_g = self.get_bare_model(self.net_g)
+        net_g_ema = self.net_g_ema
+
+        assert isinstance(net_g, torch.nn.Module) and isinstance(net_g_ema, torch.nn.Module)
 
         net_g_params = dict(net_g.named_parameters())
-        net_g_ema_params = dict(self.net_g_ema.named_parameters())
+        net_g_ema_params = dict(net_g_ema.named_parameters())
 
         for k in net_g_ema_params.keys():
             net_g_ema_params[k].data.mul_(decay).add_(net_g_params[k].data, alpha=1 - decay)
@@ -104,7 +115,7 @@ class BaseModel():
         if optim_type == 'Adam':
             optimizer = torch.optim.Adam(params, lr, **kwargs)
         else:
-            raise NotImplementedError(f'optimizer {optim_type} is not supperted yet.')
+            raise NotImplementedError(f'optimizer {optim_type} is not supported yet.')
         return optimizer
 
     def setup_schedulers(self):
@@ -239,6 +250,7 @@ class BaseModel():
             finally:
                 retry -= 1
         if retry == 0:
+            logger = get_root_logger()
             logger.warning(f'Still cannot save {save_path}. Just ignore it.')
             # raise IOError(f'Cannot save {save_path}.')
 
@@ -247,7 +259,7 @@ class BaseModel():
 
         1. Print keys with different names.
         2. If strict=False, print the same key but with different tensor size.
-            It also ignore these keys with different sizes (not load).
+            It also ignores these keys with different sizes (not load).
 
         Args:
             crt_net (torch model): Current network.
@@ -337,6 +349,7 @@ class BaseModel():
                 finally:
                     retry -= 1
             if retry == 0:
+                logger = get_root_logger()
                 logger.warning(f'Still cannot save {save_path}. Just ignore it.')
                 # raise IOError(f'Cannot save {save_path}.')
 
