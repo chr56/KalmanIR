@@ -13,8 +13,8 @@ sys.path.append(ROOT_PATH)  # Add the parent directory to sys.path for `basicsr`
 
 from basicsr.trainer import SupervisedTrainEngine
 from basicsr.utils.options import setup_env_and_update_options, ordered_yaml, populate_paths
-from basicsr.utils.validation_util import calculate_best_average_metrics, EarlyStoppingWatcher
-from basicsr.utils.misc import get_nested_dict_value, set_nested_dict_value
+from basicsr.utils.validation_util import EarlyStoppingWatcher
+from basicsr.utils.misc import set_nested_dict_value
 
 
 def prepare_cuda():
@@ -26,6 +26,15 @@ def prepare_cuda():
         time.sleep(1)
 
 
+def print_dict_items(data: dict):
+    for key, value in data.items():
+        print(f"\t\t{key}:\t\t{value}")
+
+
+def invalid_data(direction_maximize: bool = True):
+    return -1.0 if direction_maximize else float('inf')
+
+
 class PrunerWatcher(EarlyStoppingWatcher):
     def __init__(
             self,
@@ -33,6 +42,7 @@ class PrunerWatcher(EarlyStoppingWatcher):
             watch_target_metric: str,
             watch_target_dataset: str,
             watch_since: int,
+            patience: int,
     ):
         super().__init__()
         self.trial = trial
@@ -40,19 +50,31 @@ class PrunerWatcher(EarlyStoppingWatcher):
         self.watch_target_dataset = watch_target_dataset
         self.watch_since = int(watch_since)
 
+        self.patience = patience
+        self.current_step = 0
+
     def report(self, step: int, val_dataset_name: str, metric: Dict[str, Any]):
-        try:
-            if int(step) <= self.watch_since or val_dataset_name != self.watch_target_dataset:
-                return  # Skip
-            current = metric.get(self.watch_target_metric, None)
-            if current is not None and isinstance(current, float):
-                self.trial.report(current, step)
-        except ValueError as e:
-            print(f"Failed to report: {e}")
+        self.current_step = int(step)
+        if self.watch_target_dataset == val_dataset_name:
+            try:
+                current = metric.get(self.watch_target_metric, None)
+                if current is not None and isinstance(current, float):
+                    self.trial.report(current, int(step))
+            except ValueError as e:
+                print(f"Failed to report: {e}")
 
     def commit(self) -> bool:
-        if self.trial.should_prune():
-            raise optuna.TrialPruned()
+        if int(self.current_step) >= self.watch_since:
+            sys.stdout.flush()
+            if self.trial.should_prune():
+                self.patience -= 1
+                if self.patience < 0:
+                    print(f"Pruning trial at {self.current_step} without patience!")
+                    raise optuna.TrialPruned()
+                else:
+                    print(f"Continue trial with patience!")
+            else:
+                print("Continue trial!")
         return False
 
 
@@ -92,6 +114,7 @@ def objective(trial: optuna.Trial, optune_opt: dict, optune_opt_path: str, opt: 
             watch_target_metric=pruner_opt['watch_target_metric'],
             watch_target_dataset=pruner_opt['watch_target_dataset'],
             watch_since=min(pruner_opt['watch_since'], opt['train']['total_iter'] // 2),
+            patience=pruner_opt.get('patience', 4),
         )
     else:
         pruner_watcher = None
@@ -99,28 +122,25 @@ def objective(trial: optuna.Trial, optune_opt: dict, optune_opt_path: str, opt: 
     print("================================")
     print(f"Start Optuna Trial {trial.number}")
     print("================================")
-    print(f"Settings: \n{trial.params}")
+    print(f"Settings:")
+    print_dict_items(trial.params)
     print("================================")
     sys.stdout.flush()
 
     try:
         prepare_cuda()
 
-        engine = SupervisedTrainEngine(opt, opt_path=optune_opt_path, dump_real_option=True)
+        engine = SupervisedTrainEngine(
+            opt, opt_path=optune_opt_path, dump_real_option=True, print_env_info=False,
+        )
         engine.install_early_stopping_watcher(pruner_watcher)
-        model = engine.fit()
+        engine.fit()
 
         metric_config = optune_opt['metric_to_optimize']
-        result_dict = getattr(model, metric_config['result_attribute'])
-
-        if metric_config.get('key_path', None):
-            # manual
-            final_metric = get_nested_dict_value(result_dict, metric_config['key_path'])
-        elif metric_config.get('metric_name', None):
-            # auto
-            final_metric = calculate_best_average_metrics(result_dict)[metric_config['metric_name']]
-        else:
-            raise ValueError(f"Unsupported metric: {metric_config}")
+        final_metric = engine.get_current_best_result_objective(
+            target_attribute=metric_config['result_attribute'],
+            dataset_weights=metric_config['dataset_weights'],
+        ).get(metric_config['metric_name'], invalid_data(optune_opt['optimization_direction'] == 'maximize'))
 
         sys.stdout.flush()
         print("================================")
@@ -138,7 +158,7 @@ def objective(trial: optuna.Trial, optune_opt: dict, optune_opt_path: str, opt: 
         print(f" Trial {trial.number} FAILED ---\n{e}")
         print("++++++++++++++++++++++++++++++++")
         time.sleep(1)
-        return -1.0 if optune_opt['optimization_direction'] == 'maximize' else float('inf')
+        return invalid_data(optune_opt['optimization_direction'] == 'maximize')
 
 
 def main():
@@ -178,8 +198,9 @@ def main():
     )
 
     # Optuna study
+    num_trials = int(optune_opt['num_trials'])
+    startup_trials = int(optune_opt.get("startup_trials", None) or (num_trials * 0.3679))
     storage_file = f"sqlite:///{optune_opt['persistent_sqlite_name']}"
-    startup_trials = int(optune_opt['num_trials'] * 0.3679)
     study = optuna.create_study(
         study_name=optune_opt['study_name'],
         direction=optune_opt['optimization_direction'],
@@ -187,13 +208,19 @@ def main():
             n_startup_trials=startup_trials,
             n_ei_candidates=int(startup_trials * 1.2),
         ),
+        pruner=optuna.pruners.PercentilePruner(
+            percentile=25,
+            n_startup_trials=min(4, int(startup_trials * 0.8)),
+            n_min_trials=4,
+        ),
         storage=storage_file,
         load_if_exists=args.auto_resume,
     )
     print(f"Starting Optuna study '{study.study_name}':")
     print(f"  - Direction: {study.direction.name}")
     print(f"  - Sampler: {study.sampler.__class__.__name__}")
-    print(f"  - Total Trials: {optune_opt['num_trials']} (startup {startup_trials})")
+    print(f"  - Pruner: {study.pruner.__class__.__name__}")
+    print(f"  - Total Trials: {num_trials} (startup {startup_trials})")
     print(f"  - Storage: {storage_file} (resume: {args.auto_resume})")
 
     # Start the optimization
@@ -201,7 +228,7 @@ def main():
         lambda trial: objective(
             trial, optune_opt, optuna_opt_path, opt
         ),
-        n_trials=optune_opt['num_trials']
+        n_trials=num_trials
     )
 
     # Print results
@@ -210,8 +237,7 @@ def main():
     print(f"Best trial number: {study.best_trial.number}")
     print(f"Best metric value: {study.best_value}")
     print("Best hyperparameters:")
-    for key, value in study.best_params.items():
-        print(f"  {key}: {value}")
+    print_dict_items(study.best_params)
 
 
 if __name__ == '__main__':
