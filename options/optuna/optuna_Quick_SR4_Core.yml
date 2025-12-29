@@ -1,0 +1,59 @@
+study_name: 'OptunaSearch_Quick_SR4_Core_group_0'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Quick_SR4.yml'
+
+num_trials: 42
+startup_trials: 8
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'psnr'
+  dataset_weights:
+    Set14: 0.7
+    Urban100: 0.5
+
+pruner:
+  watch_target_metric: 'psnr'
+  watch_target_dataset: 'Set14'
+  watch_since: 25000
+  patience: 4
+
+
+search_space:
+  #
+  # difficult_zone_estimator
+  #
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'difficult_zone_estimator', 'expand' ]
+    args: { low: 1, high: 3 }
+  - type: 'categorical'
+    param_path: [ 'network_g', 'refinement_model', 'difficult_zone_estimator', 'final_activation' ]
+    args: { choices: ['none', 'sigmoid'] }
+  #
+  # kalman_gain_calculator
+  #
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'dz_amplify' ]
+    args: { low: 1, high: 12, step: 0.5 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'dz_expand' ]
+    args: { low: 2, high: 4 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'img_expand' ]
+    args: { low: 2, high: 5 }
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'merge_expand' ]
+    args: { low: 1, high: 3.2, step: 0.2 }
+  #
+  # kalman_predictor
+  #
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'hidden_channel_expand' ]
+    args: { low: 4, high: 12, step: 4 }
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'mamba_d_expand' ]
+    args: { low: 1, high: 3, step: 0.25 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'mamba_d_state' ]
+    args: { low: 4, high: 16, step: 4 }

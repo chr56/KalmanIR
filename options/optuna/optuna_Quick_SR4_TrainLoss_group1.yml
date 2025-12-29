@@ -1,0 +1,39 @@
+study_name: 'OptunaSearch_Quick_SR4_TrainLoss_group_1'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Quick_SR4_extended.yml'
+
+num_trials: 24
+startup_trials: 8
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'ssim'
+  dataset_weights:
+    Set14: 0.50
+    Urban100: 0.55
+
+pruner:
+  watch_target_metric: 'ssim'
+  watch_target_dataset: 'Set14'
+  watch_since: 25000
+  patience: 6
+
+
+search_space:
+#  - name: 'lr'
+#    type: 'float'
+#    param_path: [ 'train', 'optim_g', 'lr' ]
+#    args: { low: !!float 2e-4, high: !!float 6e-4, step: !!float 1e-4 }
+  - name: 'auxiliary_loss_weight'
+    type: 'float'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'loss_weight' ]
+    args: { low: 0.05, high: 0.4, step: 0.05 }
+  - name: 'auxiliary_loss_type'
+    type: 'categorical'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'mode' ]
+    args: { choices: ['l1', 'kld'] }
+  - name: 'dz_final_activation'
+    type: 'categorical'
+    param_path: [ 'network_g', 'refinement_model', 'difficult_zone_estimator', 'final_activation' ]
+    args: { choices: ['none', 'sigmoid'] }

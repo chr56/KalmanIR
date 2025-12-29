@@ -1,0 +1,35 @@
+study_name: 'OptunaSearch_Quick_SR4_TrainLoss_group_2'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Quick_SR4_extended_quicker.yml'
+
+num_trials: 24
+startup_trials: 8
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'ssim'
+  dataset_weights:
+    Set14: 0.50
+    Urban100: 0.55
+
+pruner:
+  watch_target_metric: 'ssim'
+  watch_target_dataset: 'Set14'
+  watch_since: 25000
+  patience: 4
+
+
+search_space:
+  - name: 'warmup'
+    type: 'int'
+    param_path: [ 'train', 'warmup_iter' ]
+    args: { low: 200, high: 2200, step: 400 }
+  - name: 'lr'
+    type: 'float'
+    param_path: [ 'train', 'optim_g', 'lr' ]
+    args: { low: !!float 2e-4, high: !!float 6e-4, step: !!float 1e-4 }
+  - name: 'auxiliary_loss_weight'
+    type: 'float'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'loss_weight' ]
+    args: { low: 0.05, high: 0.25, step: 0.05 }

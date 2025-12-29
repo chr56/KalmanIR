@@ -1,0 +1,48 @@
+study_name: 'OptunaSearch_Half_SR2_study_init'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Half_SR2.yml'
+
+num_trials: 14
+startup_trials: 7
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'psnr'
+  dataset_weights:
+    Set14: 0.25
+    Urban100: 0.85
+
+pruner:
+  watch_target_metric: 'psnr'
+  watch_target_dataset: 'Set14'
+  watch_since: 45000
+  patience: 12
+
+
+search_space:
+  #
+  # Training
+  #
+  - name: 'auxiliary_loss_weight'
+    type: 'float'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'loss_weight' ]
+    args: { low: 0.05, high: 0.35, step: 0.1 }
+  #
+  # kalman_gain_calculator
+  #
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'merge_expand' ]
+    args: { low: 1.0, high: 2.0, step: 0.2 }
+  #
+  # kalman_predictor
+  #
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'mamba_d_expand' ]
+    args: { low: 2.0, high: 2.6, step: 0.2 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'cab_squeeze_factor' ]
+    args: { low: 2, high: 8, step: 2 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'cab_compress_factor' ]
+    args: { low: 2, high: 8, step: 2 }

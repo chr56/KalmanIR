@@ -1,0 +1,67 @@
+study_name: 'OptunaSearch_Half_SR4_study_0'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Half_SR4.yml'
+
+num_trials: 36
+startup_trials: 10
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'psnr'
+  dataset_weights:
+    Set14: 0.6
+    Urban100: 0.5
+
+pruner:
+  watch_target_metric: 'psnr'
+  watch_target_dataset: 'Set14'
+  watch_since: 70000
+  patience: 8
+
+
+search_space:
+  #
+  # Training
+  #
+  - name: 'auxiliary_loss_weight'
+    type: 'float'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'loss_weight' ]
+    args: { low: 0.05, high: 0.3, step: 0.05 }
+  - name: 'auxiliary_loss_type'
+    type: 'categorical'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'mode' ]
+    args: { choices: ['l1', 'kld'] }
+  #
+  # difficult_zone_estimator
+  #
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'difficult_zone_estimator', 'num_block' ]
+    args: { low: 2, high: 4 }
+  #
+  # kalman_gain_calculator
+  #
+  - type: 'categorical'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'dz_amplify_method' ]
+    args: {  choices: ['cubic', 'exp'] }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'dz_expand' ]
+    args: { low: 2, high: 4 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'img_expand' ]
+    args: { low: 3, high: 6 }
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_gain_calculator', 'merge_expand' ]
+    args: { low: 1.8, high: 3.2, step: 0.2 }
+  #
+  # kalman_predictor
+  #
+  - type: 'float'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'mamba_d_expand' ]
+    args: { low: 1.75, high: 2.75, step: 0.25 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'cab_squeeze_factor' ]
+    args: { low: 2, high: 8, step: 2 }
+  - type: 'int'
+    param_path: [ 'network_g', 'refinement_model', 'kalman_predictor', 'cab_compress_factor' ]
+    args: { low: 2, high: 8, step: 2 }
