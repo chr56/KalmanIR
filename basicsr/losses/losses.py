@@ -9,7 +9,7 @@ from basicsr.utils.registry import LOSS_REGISTRY
 from .perceptual_losses import PerceptualLoss
 from .gan_losses import GANLoss
 from .primitive_losses import (
-    bce_loss, bce_with_logits_loss,
+    bce_loss, bce_with_logits_loss, kl_loss,
     L1Loss, CharbonnierLoss, MSELoss,
 )
 
@@ -123,6 +123,21 @@ class FourierWrapper(nn.Module):
         else:
             return self.wrapped_loss(pred_freq, target_freq, weight, **kwargs)
 
+@LOSS_REGISTRY.register()
+class KLDivergenceLoss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(KLDivergenceLoss, self).__init__()
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+
+    def forward(self, pred, target, **kwargs):
+        # (B, C, H, W)
+        # log_pred = F.log_softmax(pred, dim=1)
+        # prob_target = F.softmax(target, dim=1)
+        # loss = F.kl_div(log_pred, prob_target, reduction=self.reduction)
+        loss = kl_loss(pred, target, **kwargs)
+        return self.loss_weight * loss
+
 
 @LOSS_REGISTRY.register()
 class DifficultZoneReconstructionNoiseLoss(nn.Module):
@@ -146,6 +161,8 @@ class DifficultZoneReconstructionNoiseLoss(nn.Module):
             self.loss_fn = BCELoss(reduction=self.reduction, with_sigmoid=True)
         elif mode == 'fourier':
             self.loss_fn = FourierLoss(reduction=self.reduction)
+        elif mode == 'kld':
+            self.loss_fn = KLDivergenceLoss(reduction=self.reduction)
         else:
             raise ValueError(f'Unsupported mode: {mode}.')
 
