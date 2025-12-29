@@ -16,7 +16,10 @@ _DEFAULT_MODE = 'pixel'
 class MixedLoss(nn.Module):
     def __init__(self, components, log_gan_output: bool = True):
         super(MixedLoss, self).__init__()
-        self.loss_components = nn.ModuleList([_create_loss_component_from_opt(opt) for opt in components])
+        if isinstance(components, dict):
+            self.loss_components = nn.ModuleList([_create_loss_component_from_opt(opt) for name, opt in components.items()])
+        elif isinstance(components, list):
+            self.loss_components = nn.ModuleList([_create_loss_component_from_opt(opt) for opt in components])
         self.log_gan_output = log_gan_output
 
     def validate(self, available_output_names) -> bool:
