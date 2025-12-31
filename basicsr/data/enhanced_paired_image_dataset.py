@@ -61,9 +61,6 @@ class EnhancedPairedImageDataset(data.Dataset):
         self.gt_size = self.opt['gt_size']
         self.lq_size = self.gt_size // self.scale
 
-        self.mean = opt['mean'] if 'mean' in opt else None
-        self.std = opt['std'] if 'std' in opt else None
-
         self.convert_color_space = 'color' in self.opt and self.opt['color'] == 'y'
 
         # file client (io backend)
@@ -87,55 +84,20 @@ class EnhancedPairedImageDataset(data.Dataset):
             self.paths = paired_paths_from_folder(
                 [self.lq_folder, self.gt_folder], ['lq', 'gt'], self.filename_tmpl, self.task)
 
-        os.environ['NO_ALBUMENTATIONS_UPDATE'] = "1"
-        # noinspection PyPep8Naming
-        import albumentations as A
-
         ###################
 
-        self.transforms_gt_train = [
-            A.Rotate(p=0.7, limit=(-45, 45)),
-            A.RandomCrop(height=self.gt_size, width=self.gt_size),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.ChannelShuffle(p=0.1),
-            A.RandomBrightnessContrast(p=0.1, brightness_limit=0.2, contrast_limit=0.3),
-        ]
-        if self.mean is not None or self.std is not None:
-            self.transforms_gt_train.append(
-                A.Normalize(mean=self.mean, std=self.std)  # Normalize
-            )
-        self.transforms_gt_train = A.Compose(self.transforms_gt_train)
-
-        ###################
-
-        if self.task == 'denoising_color':
-            self.transforms_lq_train = A.Compose(
-                transforms=[
-                    A.OneOf([
-                        A.ColorJitter(p=0.1, brightness=0.2, contrast=0.2, saturation=0.1, hue=0.1),
-                        A.GaussianBlur(p=0.05, blur_limit=int(self.lq_size / 5)),
-                        A.GaussNoise(p=0.15, std_range=(0.09, 0.16)),
-                    ]),
-                    A.GaussNoise(noise_scale_factor=self.noise / 255., p=1.0),
-                ],
-            )
-            self.transform_lq_val = A.GaussNoise(noise_scale_factor=self.noise / 255., p=1.0)
-        elif self.task == 'SR':
-            self.transforms_lq_train = A.Compose(
-                transforms=[
-                    A.Resize(height=self.lq_size, width=self.lq_size, interpolation=cv2.INTER_CUBIC),
-                    A.OneOf([
-                        A.ColorJitter(p=0.1, brightness=0.1, contrast=0.1, saturation=0.05, hue=0.05),
-                        A.GaussianBlur(p=0.05, blur_limit=int(self.lq_size / 5)),
-                        A.GaussNoise(p=0.15, std_range=(0.09, 0.16)),
-                    ]),
-                    A.ChannelShuffle(p=0.25),
-                ],
-            )
-            self.transform_lq_val = A.Resize(height=self.lq_size, width=self.lq_size, interpolation=cv2.INTER_CUBIC)
-        else:
-            raise NotImplementedError(f"Task {self.task} not implemented.")
+        self.aug_opt = opt.get('augmentation', {})
+        from .albumentations_transform import get_albumentations_transforms
+        all_transforms = get_albumentations_transforms(
+            aug_opt=self.aug_opt,
+            task=self.task,
+            gt_size=self.gt_size,
+            lq_size=self.lq_size,
+            noise=self.noise,
+        )
+        self.transforms_gt_train = all_transforms[0]
+        self.transforms_lq_train = all_transforms[1]
+        self.transform_lq_val = all_transforms[2]
 
     def _read_img_gt(self, index, convert_rgb: bool = True):
         gt_path = self.paths[index]['gt_path']
@@ -166,9 +128,9 @@ class EnhancedPairedImageDataset(data.Dataset):
 
         if self.opt['phase'] == 'train':
             img_gt = self.transforms_gt_train(image=img_gt)['image']
-
             img_lq = self.transforms_lq_train(image=img_gt)['image']
         else:  # val
+            img_gt = img_gt
             img_lq = self.transform_lq_val.apply(img=img_gt)
 
         # color space transform
