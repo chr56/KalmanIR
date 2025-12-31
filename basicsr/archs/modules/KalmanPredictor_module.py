@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from . import MODULES_REGISTRY
+from .utils import NormLayerType, ActivationFunction, get_activation_function
 
 
 @MODULES_REGISTRY.register()
@@ -117,9 +118,6 @@ class KalmanPredictorMambaBlockV2x(nn.Module):
     @staticmethod
     def model_input_format():
         return ['image']
-
-
-from .utils import NormLayerType, ActivationFunction, get_activation_function
 
 
 @MODULES_REGISTRY.register()
