@@ -1,0 +1,34 @@
+study_name: 'OptunaSearch_Half_SR4_study_learning_rate'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/template_Half_SR4.yml'
+
+num_trials: 12
+startup_trials: 4
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'psnr'
+  dataset_weights:
+    Set14: 0.50
+    Urban100: 0.56
+
+pruner:
+  watch_target_metric: 'psnr'
+  watch_target_dataset: 'Set14'
+  watch_since: 45000
+  patience: 7
+
+
+search_space:
+  #
+  # Training
+  #
+  - name: 'lr'
+    type: 'float'
+    param_path: [ 'train', 'optim_g', 'lr']
+    args: { low: !!float 1e-4, high: !!float 6e-4, step: !!float 5e-5 }
+  - name: 'warmup'
+    type: 'int'
+    param_path: [ 'train', 'warmup_iter' ]
+    args: { low: 0, high: 2500, step: 500 }
