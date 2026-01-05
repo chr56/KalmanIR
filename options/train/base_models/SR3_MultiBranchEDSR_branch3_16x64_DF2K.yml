@@ -1,0 +1,199 @@
+# general settings for image SR training
+name: SR3_MultiBranchEDSR_branch3_16x64_DF2K_run1
+model_type: MultiBranchIRModel
+scale: 3
+num_gpu: 1
+manual_seed: 42
+
+# network structures
+network_g:
+  type: FusionCompositeModel
+  upscale: 3
+  channels: 3 # Input Image Channel
+  branch: 3 # Branches
+  branch_names: [ 'sr_spatial', 'sr_frequential', 'sr_gan' ]
+  img_range: 1.
+  base_model:
+    type: MultiBranchEDSR
+    n_blocks: 16 # 32
+    n_features: 64 # 256
+    res_scale: 0.1
+    norm_image: true
+  refinement_model:
+    type: Skipped
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+
+# training settings
+train:
+  mixed_losses:
+    type: MixedLoss
+    log_gan_output: true
+    components:
+      - target: 'sr_spatial'
+        loss:
+          type: L1Loss
+          loss_weight: 1.0
+      - target: 'sr_frequential'
+        loss:
+          type: FourierLoss
+          loss_weight: 1.0
+      - target: 'sr_gan'
+        name: l1
+        loss:
+          type: L1Loss
+          loss_weight: 1.0
+      - target: 'sr_gan'
+        mode: gan_frozen
+        loss:
+          type: IntegratedGANLoss
+          gan_type: 'vanilla'
+          loss_weight: 0.15
+          discriminator:
+            type: VGGStyleDiscriminator
+            num_in_ch: 3
+            num_feat: 64
+            border: 2 # 128 + 2 * 2 = 132
+          discriminator_weights: 'pretrain_weights/VGGStyleDiscriminator_1120.pth'
+
+  #  grad_clip_max_norm: !!float 8.00
+  optim_g:
+    type: Adam
+    lr: !!float 3e-4
+    weight_decay: 0
+    betas: [ 0.9, 0.99 ]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [ 125000, 200000, 225000, 237500 ]
+    gamma: 0.5
+
+  total_iter: 250000
+  warmup_iter: 1000
+
+
+# validation settings
+val:
+  val_freq: !!float 10e3
+  save_img: false
+
+  enabled_outputs:
+    - sr_spatial
+    - sr_frequential
+    - sr_gan
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 3
+      test_y_channel: true
+    ssim:
+      type: calculate_ssim
+      crop_border: 3
+      test_y_channel: true
+    lpips:
+      type: calculate_lpips
+      model: 'alex'
+
+  profile_quick:
+    start: 0
+    frequency: !!float 10e3
+    datasets:
+      - Set5
+      - Set14
+
+  profile_slow:
+    start: !!float 10e3
+    frequency: !!float 60e3
+    datasets:
+      - Urban100
+      - BSDS100
+      # - Manga109
+
+
+# logging settings
+logger:
+  print_freq: 250
+  save_checkpoint_freq: !!float 30e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+
+# dataset and data loader settings
+datasets:
+  train:
+    task: SR
+    name: DF2K
+    type: PairedImageShuffleDataset
+    dataroot_gt:
+      - datasets/DF2K/train_HR
+    dataroot_lq:
+      - datasets/DF2K/train_LR_bicubic/X3
+    filename_tmpl: '{}x3'
+    io_backend:
+      type: disk
+
+    gt_size: 132
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 16
+    batch_size_per_gpu: 8
+    dataset_enlarge_ratio: 100
+    prefetch_mode: ~
+    pin_memory: true
+
+  val_1:
+    name: Set5
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_3/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_3/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_2:
+    name: Set14
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_3/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_3/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_3:
+    name: Urban100
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_3/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_3/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_4:
+    name: BSDS100
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_3/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_3/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_5:
+    name: Manga109
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_3/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_3/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
