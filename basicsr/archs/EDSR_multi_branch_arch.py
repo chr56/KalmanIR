@@ -50,10 +50,15 @@ class MultiBranchEDSR(nn.Module):
         m_body.append(nn.Conv2d(n_features, n_features, kernel_size, padding=padding))
 
         # define tail module
-        m_tail: List[nn.Module] = [
-            UpSampler(upscale, n_features, act=False),
-            nn.Conv2d(n_features, channel * branch, kernel_size, padding='same')
-        ]
+        if upscale == 1:
+            m_tail: List[nn.Module] = [
+                nn.Conv2d(n_features, channel * branch, kernel_size, padding=padding)
+            ]
+        else:
+            m_tail: List[nn.Module] = [
+                UpSampler(upscale, n_features, act=False),
+                nn.Conv2d(n_features, channel * branch, kernel_size, padding=padding)
+            ]
 
         self.head = nn.Sequential(*m_head)
         self.body = nn.Sequential(*m_body)
