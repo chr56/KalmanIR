@@ -14,13 +14,15 @@ class VGGStyleDiscriminator(nn.Module):
     Args:
         num_in_ch (int): Channel number of inputs. Default: 3.
         num_feat (int): Channel number of base intermediate features.Default: 64.
+        input_size (int): Input image size, must be 128 or 256. Default: 128.
+        border(int): border size to be cropped. Default: 0.
     """
 
-    def __init__(self, num_in_ch, num_feat, input_size=128, crop_boarder=0):
+    def __init__(self, num_in_ch: int, num_feat: int, input_size: int=128, border: int=0):
         super(VGGStyleDiscriminator, self).__init__()
-        self.input_size = input_size
-        self.crop_boarder = crop_boarder
-        self.actual_input_size = input_size + crop_boarder * 2
+        self.crop_border = border
+        self.input_size = input_size # input size that internal network handles after crop
+        self.expected_input_size = input_size + border * 2 # expected and direct input size
 
         assert self.input_size == 128 or self.input_size == 256, (
             f'input size must be 128 or 256, but received {input_size}')
@@ -62,11 +64,16 @@ class VGGStyleDiscriminator(nn.Module):
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, x):
-        assert x.size(2) == self.actual_input_size, (
-            f'Input size must be identical to input_size: expected {self.actual_input_size} but received {x.size()[2:3]}.'
+        assert x.size(2) == self.expected_input_size, (
+            f'Illegal input size: expected {self.expected_input_size} but received {x.size()[2:3]}.'
         )
-        if self.crop_boarder > 0:
-            x = x[:, :, self.crop_boarder:-self.crop_boarder, self.crop_boarder:-self.crop_boarder]
+        if self.crop_border > 0:
+            # Cropping
+            x = x[:, :, self.crop_border:-self.crop_border, self.crop_border:-self.crop_border]
+        elif self.crop_border < 0:
+            # Padding
+            pad_size = -self.crop_border
+            x = F.pad(x, (pad_size, pad_size, pad_size, pad_size), mode='constant')
 
         feat = self.lrelu(self.conv0_0(x))
         feat = self.lrelu(self.bn0_1(self.conv0_1(feat)))  # output spatial size: /2
