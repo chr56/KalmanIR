@@ -1,14 +1,14 @@
 # general settings for image SR training
-name: SR3_SwinIR_DichotomyIR_full_run0
+name: SR4_SwinIR_BSRMD_full_run0
 model_type: MultiBranchIRModel
-scale: 3
+scale: 4
 num_gpu: 1
 manual_seed: 42
 
 # network structures
 network_g:
   type: FusionCompositeModel
-  upscale: 3
+  upscale: 4
   channels: 3 # Input Image Channel
   branch: 3 # Branches
   branch_names: ['sr_spatial', 'sr_frequential', 'sr_gan']
@@ -25,12 +25,13 @@ network_g:
     resi_connection: '1conv'
     norm_image: true
   refinement_model:
-    type: DichotomyIR
-    mamba_d_state: 8
+    type: BSRMD
+    features_size: 64
+    class_index: 0
 
 # path
 path:
-  pretrain_network_g: experiments/SR3_MultiBranchSwinIRLite_branch3_P32W8_DF2K_run1/models/net_g_latest.pth
+  pretrain_network_g: experiments/SR4_MultiBranchSwinIRLite_branch3_P32W8_DF2K_run1/models/net_g_latest.pth
   strict_load_g: false
   resume_state: ~
 
@@ -76,11 +77,11 @@ val:
   metrics:
     psnr: # metric name, can be arbitrary
       type: calculate_psnr
-      crop_border: 3
+      crop_border: 4
       test_y_channel: true
     ssim:
       type: calculate_ssim
-      crop_border: 3
+      crop_border: 4
       test_y_channel: true
     lpips:
       type: calculate_lpips
@@ -121,12 +122,12 @@ datasets:
     dataroot_gt:
       - datasets/DF2K/train_HR
     dataroot_lq:
-      - datasets/DF2K/train_LR_bicubic/X3
-    filename_tmpl: '{}x3'
+      - datasets/DF2K/train_LR_bicubic/X4
+    filename_tmpl: '{}x4'
     io_backend:
       type: disk
 
-    gt_size: 132
+    gt_size: 128
     use_hflip: true
     use_rot: true
 
@@ -141,40 +142,40 @@ datasets:
   val_1:
     name: Set5
     type: PairedImageDataset
-    dataroot_gt: datasets/benchmark/Set5/image_SRF_3/HR
-    dataroot_lq: datasets/benchmark/Set5/image_SRF_3/LR
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_2:
     name: Set14
     type: PairedImageDataset
-    dataroot_gt: datasets/benchmark/Set14/image_SRF_3/HR
-    dataroot_lq: datasets/benchmark/Set14/image_SRF_3/LR
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_3:
     name: Urban100
     type: PairedImageDataset
-    dataroot_gt: datasets/benchmark/Urban100/image_SRF_3/HR
-    dataroot_lq: datasets/benchmark/Urban100/image_SRF_3/LR
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_4:
     name: BSDS100
     type: PairedImageDataset
-    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_3/HR
-    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_3/LR
+    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
   val_5:
     name: Manga109
     type: PairedImageDataset
-    dataroot_gt: datasets/benchmark/Manga109/image_SRF_3/HR
-    dataroot_lq: datasets/benchmark/Manga109/image_SRF_3/LR
+    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
     filename_tmpl: '{}'
     io_backend:
       type: disk
