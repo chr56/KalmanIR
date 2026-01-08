@@ -1,0 +1,225 @@
+# general settings for image SR training
+name: SR4_SwinIR_KFRN_Cnd1_full_run0_search
+model_type: MultiBranchIRModel
+scale: 4
+num_gpu: 1
+manual_seed: 42
+
+# network structures
+network_g:
+  type: FusionCompositeModel
+  upscale: 4
+  channels: 3 # Input Image Channel
+  branch: 3 # Branches
+  branch_names: ['sr_spatial', 'sr_frequential', 'sr_gan']
+  img_range: 1.
+  base_model:
+    type: MultiBranchSwinIR
+    img_size: 32
+    depths: [ 3, 3, 4, 4, 3, 3 ]
+    num_heads: [ 3, 3, 4, 4, 3, 3 ]
+    window_size: 8
+    embed_dim: 144
+    mlp_ratio: 2
+    upsampler: 'pixelshuffle'
+    resi_connection: '1conv'
+    norm_image: true
+  refinement_model:
+    type: KFRNv1
+    preprocess: 'none'
+    norm_image: true
+    difficult_zone_estimator:
+      type: DifficultZoneEstimatorV4final
+      final_activation: 'none'
+      num_block: 4
+      expand: 2
+    kalman_predictor:
+      type: KalmanPredictorMambaBlockV3base
+      hidden_channel_expand: 12
+      num_layer: 2
+      mamba_d_state: 8
+      mamba_d_expand: 2.4
+      cab_compress_factor: 2
+      cab_squeeze_factor: 6
+      conv_expand_kernel_size: 3
+      conv_expand_norm: 'layer'
+      conv_shrink_kernel_size: 1
+      final_activation: 'tanh'
+    kalman_gain_calculator:
+      type: KalmanGainCalculatorV4flexible
+      dz_amplify: 3
+      dz_amplify_method: 'exp'
+      dz_expand: 4.
+      img_expand: 5.
+      norm_dz_conv_block: 'instance'
+      norm_img_conv_block: 'layer'
+      activation_dz_conv_block: 'leaky_relu'
+      activation_img_conv_block: 'silu'
+      merge_expand: 1.6
+      norm_merge_conv_block: 'layer'
+      activation_merge_conv_block: 'silu'
+
+# path
+path:
+  pretrain_network_g: experiments/SR4_MultiBranchSwinIRLite_branch3_P32W8_DF2K_run1/models/net_g_latest.pth
+  strict_load_g: false
+  resume_state: ~
+
+
+# training settings
+train:
+  frozen_parameters: ['base_model']
+  # losses
+  mixed_losses:
+    type: MixedLoss
+    log_gan_output: true
+    components:
+      loss_main:
+        target: 'sr_refined'
+        loss:
+          type: L1Loss
+          loss_weight: 1.0
+      loss_auxiliary:
+        target: 'difficult_zone'
+        mode: 'custom'
+        loss:
+          type: DifficultZoneReconstructionNoiseLoss
+          loss_weight: 0.15
+          preprocess: none
+          mode: kld
+
+  #  grad_clip_max_norm: !!float 8.00
+  optim_g:
+    type: Adam
+    lr: !!float 6e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [ 200000, 275000, 287500 ]
+    gamma: 0.5
+
+  total_iter: 300000
+  warmup_iter: 1000
+
+
+# validation settings
+val:
+  val_freq: !!float 10e3
+  save_img: false
+
+  enabled_outputs:
+    - sr_refined
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 4
+      test_y_channel: true
+    ssim:
+      type: calculate_ssim
+      crop_border: 4
+      test_y_channel: true
+    lpips:
+      type: calculate_lpips
+      model: 'alex'
+
+  profile_quick:
+    start: !!float 10e3
+    frequency: !!float 20e3
+    datasets:
+      - Set5
+      - Set14
+
+  profile_slow:
+    start: !!float 40e3
+    frequency: !!float 30e3
+    datasets:
+      - Urban100
+      # - BSDS100
+      # - Manga109
+
+
+# logging settings
+logger:
+  print_freq: 250
+  save_checkpoint_freq: !!float 80e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+
+# dataset and data loader settings
+datasets:
+  train:
+    task: SR
+    name: DF2K
+    type: PairedImageShuffleDataset
+    dataroot_gt:
+      - datasets/DF2K/train_HR
+    dataroot_lq:
+      - datasets/DF2K/train_LR_bicubic/X4
+    filename_tmpl: '{}x4'
+    io_backend:
+      type: disk
+
+    gt_size: 128
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 36
+    batch_size_per_gpu: 6
+    dataset_enlarge_ratio: 72
+    prefetch_mode: ~
+    pin_memory: true
+
+  val_1:
+    name: Set5
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set5/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set5/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_2:
+    name: Set14
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Set14/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Set14/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+  val_3:
+    name: Urban100
+    type: PairedImageDataset
+    dataroot_gt: datasets/benchmark/Urban100/image_SRF_4/HR
+    dataroot_lq: datasets/benchmark/Urban100/image_SRF_4/LR
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+#  val_4:
+#    name: BSDS100
+#    type: PairedImageDataset
+#    dataroot_gt: datasets/benchmark/BSDS100/image_SRF_4/HR
+#    dataroot_lq: datasets/benchmark/BSDS100/image_SRF_4/LR
+#    filename_tmpl: '{}'
+#    io_backend:
+#      type: disk
+#  val_5:
+#    name: Manga109
+#    type: PairedImageDataset
+#    dataroot_gt: datasets/benchmark/Manga109/image_SRF_4/HR
+#    dataroot_lq: datasets/benchmark/Manga109/image_SRF_4/LR
+#    filename_tmpl: '{}'
+#    io_backend:
+#      type: disk
+
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

@@ -1,0 +1,41 @@
+study_name: 'OptunaSearch_SR4_KFRN_Cnd1_loss_weight'
+persistent_sqlite_name: database_optuna.db
+base_config_path: 'options/optuna/SR4_SwinIR_KFRN_Cnd1_template1.yml'
+
+num_trials: 18
+startup_trials: 7
+optimization_direction: 'maximize' # 'maximize' for metrics, 'minimize' for loss.
+
+metric_to_optimize:
+  result_attribute: 'best_metric_results'
+  metric_name: 'psnr'
+  dataset_weights:
+    Set14: 0.25
+    Urban100: 0.85
+
+pruner:
+  watch_target_metric: 'psnr'
+  watch_target_dataset: 'Set14'
+  watch_since: 60000
+  patience: 9
+
+
+search_space:
+  #
+  # Auxiliary Loss
+  #
+  - name: 'auxiliary_loss_weight'
+    type: 'float'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'loss_weight' ]
+    args: { low: 0.05, high: 0.35, step: 0.05 }
+  - name: 'auxiliary_loss_type'
+    type: 'categorical'
+    param_path: [ 'train', 'mixed_losses', 'components', 'loss_auxiliary', 'loss', 'mode' ]
+    args: { choices: ['l1', 'kld'] }
+  #
+  # Model
+  #
+  - name: 'dz_final_activation'
+    type: 'categorical'
+    param_path: [ 'network_g', 'refinement_model', 'difficult_zone_estimator', 'final_activation' ]
+    args: { choices: ['none', 'sigmoid'] }
