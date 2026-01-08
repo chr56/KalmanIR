@@ -3,7 +3,7 @@ from typing import Dict
 import torch
 from torch import nn
 
-from basicsr.models.util_config import convert_format
+from basicsr.utils.binary_transform import convert_format
 from basicsr.utils.img_util import (
     calculate_and_padding_image,
     calculate_borders_for_chopping,

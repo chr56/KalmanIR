@@ -3,7 +3,22 @@
 # @Author  : stack Zhang
 # @FileName: binary_transform.py
 # @Email   : yanzhang1991@cqupt.edu.cn
+from typing import Literal
+
 import torch
+
+_SUPPORTED_FORMAT = Literal['B', 'D']
+
+
+def convert_format(tensor: torch.Tensor, from_format: _SUPPORTED_FORMAT, to_format: _SUPPORTED_FORMAT) -> torch.Tensor:
+    if from_format == to_format:
+        return tensor
+    elif from_format == 'D' and to_format == 'B':
+        return decimal_to_binary((tensor * 255.))
+    elif from_format == 'B' and to_format == 'D':
+        return binary_to_decimal(tensor)
+    else:
+        raise NotImplementedError(f"`Conversion {from_format} -> {to_format}` is not implemented.")
 
 
 def decimal_to_binary(input_tensor):
